@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bel_sekolah_postgres
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: bel_sekolah_mtsn2
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+      # Kita gunakan 'scram-sha-256' atau hapus baris ini agar default-nya aman namun lancar.
+      # Tapi jika kamu tetap ingin MD5, biarkan baris di bawah ini:
+      POSTGRES_HOST_AUTH_METHOD: md5
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # PGPASSWORD disisipkan di sini agar healthcheck tidak ditolak oleh MD5
+      test: ["CMD-SHELL", "PGPASSWORD=postgres123 pg_isready -U postgres -d bel_sekolah_mtsn2"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: >
+      postgres
+      -c listen_addresses='*'
+      -c max_connections=100
+
+volumes:
+  postgres_data:
+    driver: local
