@@ -1,0 +1,56 @@
+# Development files
+.env
+.env.local
+.env.*.local
+.git
+.gitignore
+.github
+.idea
+.vscode
+.editorconfig
+
+# Node modules (will be installed during build)
+node_modules
+
+# Composer vendor (will be installed during build)
+vendor
+
+# Testing
+phpunit.xml
+phpunit.xml.dist
+.coverage
+.phpunit.result.cache
+
+# Development & documentation
+*.md
+DASHBOARD_FEATURES.md
+DASHBOARD_TROUBLESHOOTING.md
+DEPLOYMENT.md
+PROGRESS_REPORT.md
+QUICK_REFERENCE.md
+QUICK_START.md
+VITE_GUIDE.md
+RANCANGAN*.pdf
+template_jadwal_bel.xlsx
+test_db.php
+
+# Docker
+docker-compose.yml
+temp_laravel/
+
+# Storage & Cache (will be generated)
+storage/app/public/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/testing/*
+storage/framework/views/*
+storage/logs/*
+bootstrap/cache/*
+
+# Build outputs (will be generated)
+public/build
+
+# Misc
+.DS_Store
+*.log
+
