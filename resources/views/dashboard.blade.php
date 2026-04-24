@@ -211,9 +211,6 @@
                                                 <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                                                     Keterangan
                                                 </th>
-                                                <th scope="col" class="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                                    Status
-                                                </th>
                                             </tr>
                                         </thead>
                                         <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -243,29 +240,6 @@
                                                         <div class="max-w-xs truncate" title="{{ $schedule->keterangan }}">
                                                             {{ $schedule->keterangan ?? '-' }}
                                                         </div>
-                                                    </td>
-                                                    <td class="px-4 py-4 text-center" x-data="{ time: '{{ date('H:i', strtotime($schedule->time)) }}' }">
-                                                        <!-- Selesai (waktu sudah lewat) -->
-                                                        <span x-show="isSchedulePassed(time)" class="inline-flex items-center px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs rounded-full">
-                                                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                                                            </svg>
-                                                            Selesai
-                                                        </span>
-                                                        <!-- Sedang Berlangsung (waktu sama dengan sekarang) -->
-                                                        <span x-show="!isSchedulePassed(time) && isScheduleNow(time)" class="inline-flex items-center px-2 py-1 bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300 text-xs rounded-full font-semibold">
-                                                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
-                                                            </svg>
-                                                            Sekarang
-                                                        </span>
-                                                        <!-- Menunggu (waktu belum tiba) -->
-                                                        <span x-show="!isSchedulePassed(time) && !isScheduleNow(time)" class="inline-flex items-center px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs rounded-full">
-                                                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
-                                                            </svg>
-                                                            Menunggu
-                                                        </span>
                                                     </td>
                                                 </tr>
                                             @endforeach

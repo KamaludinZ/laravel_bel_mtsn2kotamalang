@@ -97,6 +97,7 @@
                                         <th class="px-4 py-3 text-left text-xs font-semibold text-white uppercase">No</th>
                                         <th class="px-4 py-3 text-left text-xs font-semibold text-white uppercase">Waktu</th>
                                         <th class="px-4 py-3 text-left text-xs font-semibold text-white uppercase">Nama Audio</th>
+                                        <th class="px-4 py-3 text-left text-xs font-semibold text-white uppercase">Durasi</th>
                                         <th class="px-4 py-3 text-left text-xs font-semibold text-white uppercase">Keterangan</th>
                                         <th class="px-4 py-3 text-center text-xs font-semibold text-white uppercase">Status</th>
                                         @auth
@@ -122,6 +123,9 @@
                                                     </div>
                                                     <span class="text-sm md:text-base text-white" x-text="schedule.audio.title"></span>
                                                 </div>
+                                            </td>
+                                            <td class="px-4 py-3 whitespace-nowrap">
+                                                <span class="text-sm font-mono text-blue-300" x-text="schedule.audio.duration_formatted || '00:00'"></span>
                                             </td>
                                             <td class="px-4 py-3">
                                                 <span class="text-sm text-white/80" x-text="schedule.keterangan || '-'"></span>
@@ -283,8 +287,38 @@
                                 </button>
                             </div>
 
-                            <div x-show="isManualPlaying" class="text-center">
-                                <p class="text-white/70 text-xs">🎵 Audio sedang diputar...</p>
+                            <!-- Progress Bar & Timer for Manual Audio -->
+                            <div x-show="isManualPlaying" class="space-y-2">
+                                <div class="flex justify-between text-xs text-white/80">
+                                    <span x-text="manualCurrentTimeFormatted">00:00</span>
+                                    <span x-text="manualDurationFormatted">00:00</span>
+                                </div>
+                                <div class="w-full bg-white/20 rounded-full h-2">
+                                    <div class="bg-green-500 h-2 rounded-full transition-all duration-300" :style="`width: ${manualProgress}%`"></div>
+                                </div>
+                                <p class="text-white/70 text-xs text-center">🎵 Audio sedang diputar...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Now Playing Info (when audio is playing) -->
+                    <div x-show="currentPlayingSchedule || currentSchedulePlayingId || isManualPlaying" class="bg-gradient-to-br from-green-500/30 to-blue-500/30 backdrop-blur-sm rounded-xl p-4 border border-green-400/30">
+                        <h3 class="text-sm font-semibold text-white/70 mb-3 flex items-center gap-2">
+                            <svg class="w-4 h-4 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M18 3a1 1 0 00-1.196-.98l-10 2A1 1 0 006 5v9.114A4.369 4.369 0 005 14c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V7.82l8-1.6v5.894A4.37 4.37 0 0015 12c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V3z"/>
+                            </svg>
+                            Sedang Diputar
+                        </h3>
+                        <div class="space-y-3">
+                            <div>
+                                <p class="text-white font-semibold" x-text="nowPlayingTitle">-</p>
+                            </div>
+                            <div class="flex justify-between text-xs text-white/80">
+                                <span x-text="currentTimeFormatted">00:00</span>
+                                <span x-text="durationFormatted">00:00</span>
+                            </div>
+                            <div class="w-full bg-white/20 rounded-full h-2.5">
+                                <div class="bg-gradient-to-r from-green-400 to-blue-500 h-2.5 rounded-full transition-all duration-300" :style="`width: ${playbackProgress}%`"></div>
                             </div>
                         </div>
                     </div>
@@ -317,10 +351,20 @@
                 currentPlayingSchedule: null,
                 clockInterval: null,
                 checkInterval: null,
+                progressInterval: null,
                 manualAudioId: '',
                 isManualPlaying: false,
                 audioLibraries: @json($audioLibraries),
                 currentSchedulePlayingId: null,
+                // Progress tracking
+                playbackProgress: 0,
+                currentTimeFormatted: '00:00',
+                durationFormatted: '00:00',
+                nowPlayingTitle: '-',
+                // Manual audio progress
+                manualProgress: 0,
+                manualCurrentTimeFormatted: '00:00',
+                manualDurationFormatted: '00:00',
 
                 init() {
                     this.updateClock();
@@ -379,11 +423,14 @@
 
                 playAudio(schedule) {
                     this.currentPlayingSchedule = schedule;
+                    this.nowPlayingTitle = schedule.audio.title;
                     const audio = this.$refs.audioPlayer;
                     audio.src = schedule.audio.file_url;
+
                     audio.play()
                         .then(() => {
                             console.log('Playing:', schedule.audio.title);
+                            this.startProgressTracking(audio, schedule.audio.duration);
                         })
                         .catch(error => {
                             console.error('Error playing audio:', error);
@@ -391,6 +438,7 @@
 
                     audio.onended = () => {
                         this.currentPlayingSchedule = null;
+                        this.stopProgressTracking();
                     };
                 },
 
@@ -404,6 +452,7 @@
                     const selectedAudio = this.audioLibraries.find(audio => audio.id === this.manualAudioId);
                     if (!selectedAudio) return;
 
+                    this.nowPlayingTitle = selectedAudio.title;
                     const manualPlayer = this.$refs.manualAudioPlayer;
                     manualPlayer.src = '{{ asset('storage') }}/' + selectedAudio.file_path;
 
@@ -411,6 +460,7 @@
                         .then(() => {
                             this.isManualPlaying = true;
                             console.log('Manual playing:', selectedAudio.title);
+                            this.startManualProgressTracking(manualPlayer, selectedAudio.duration);
                         })
                         .catch(error => {
                             console.error('Error playing manual audio:', error);
@@ -419,6 +469,7 @@
 
                     manualPlayer.onended = () => {
                         this.isManualPlaying = false;
+                        this.stopManualProgressTracking();
                     };
                 },
 
@@ -426,11 +477,13 @@
                     const manualPlayer = this.$refs.manualAudioPlayer;
                     manualPlayer.pause();
                     this.isManualPlaying = false;
+                    this.stopManualProgressTracking();
                 },
 
                 playScheduleAudio(schedule) {
                     if (!schedule || !schedule.audio) return;
 
+                    this.nowPlayingTitle = schedule.audio.title;
                     const schedulePlayer = this.$refs.scheduleAudioPlayer;
                     schedulePlayer.src = schedule.audio.file_url;
 
@@ -438,6 +491,7 @@
                         .then(() => {
                             this.currentSchedulePlayingId = schedule.id;
                             console.log('Playing schedule audio:', schedule.audio.title);
+                            this.startProgressTracking(schedulePlayer, schedule.audio.duration);
                         })
                         .catch(error => {
                             console.error('Error playing schedule audio:', error);
@@ -446,6 +500,7 @@
 
                     schedulePlayer.onended = () => {
                         this.currentSchedulePlayingId = null;
+                        this.stopProgressTracking();
                     };
                 },
 
@@ -453,6 +508,7 @@
                     const schedulePlayer = this.$refs.scheduleAudioPlayer;
                     schedulePlayer.pause();
                     this.currentSchedulePlayingId = null;
+                    this.stopProgressTracking();
                 },
 
                 isSchedulePlaying(scheduleId) {
@@ -474,6 +530,89 @@
                     const currentTimeStr = now.toTimeString().slice(0, 5); // HH:MM
 
                     return schedule.time === currentTimeStr;
+                },
+
+                // Progress tracking methods
+                startProgressTracking(audioElement, duration) {
+                    this.stopProgressTracking(); // Clear any existing interval
+
+                    if (duration) {
+                        this.durationFormatted = this.formatTime(duration);
+                    }
+
+                    this.progressInterval = setInterval(() => {
+                        if (audioElement && !audioElement.paused) {
+                            const currentTime = audioElement.currentTime;
+                            const audioDuration = audioElement.duration || duration || 0;
+
+                            this.currentTimeFormatted = this.formatTime(currentTime);
+
+                            if (audioDuration > 0) {
+                                this.playbackProgress = (currentTime / audioDuration) * 100;
+                                if (!duration) {
+                                    this.durationFormatted = this.formatTime(audioDuration);
+                                }
+                            }
+                        }
+                    }, 500); // Update every 500ms
+                },
+
+                stopProgressTracking() {
+                    if (this.progressInterval) {
+                        clearInterval(this.progressInterval);
+                        this.progressInterval = null;
+                    }
+                    this.playbackProgress = 0;
+                    this.currentTimeFormatted = '00:00';
+                    this.durationFormatted = '00:00';
+                },
+
+                startManualProgressTracking(audioElement, duration) {
+                    this.stopManualProgressTracking();
+
+                    if (duration) {
+                        this.manualDurationFormatted = this.formatTime(duration);
+                    }
+
+                    this.manualProgressInterval = setInterval(() => {
+                        if (audioElement && !audioElement.paused) {
+                            const currentTime = audioElement.currentTime;
+                            const audioDuration = audioElement.duration || duration || 0;
+
+                            this.manualCurrentTimeFormatted = this.formatTime(currentTime);
+
+                            if (audioDuration > 0) {
+                                this.manualProgress = (currentTime / audioDuration) * 100;
+                                if (!duration) {
+                                    this.manualDurationFormatted = this.formatTime(audioDuration);
+                                }
+                            }
+                        }
+                    }, 500);
+                },
+
+                stopManualProgressTracking() {
+                    if (this.manualProgressInterval) {
+                        clearInterval(this.manualProgressInterval);
+                        this.manualProgressInterval = null;
+                    }
+                    this.manualProgress = 0;
+                    this.manualCurrentTimeFormatted = '00:00';
+                    this.manualDurationFormatted = '00:00';
+                },
+
+                formatTime(seconds) {
+                    if (!seconds || isNaN(seconds)) return '00:00';
+
+                    const hrs = Math.floor(seconds / 3600);
+                    const mins = Math.floor((seconds % 3600) / 60);
+                    const secs = Math.floor(seconds % 60);
+
+                    if (hrs > 0) {
+                        return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                    }
+
+                    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
                 }
             }
         }

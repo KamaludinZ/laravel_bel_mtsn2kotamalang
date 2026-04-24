@@ -13,10 +13,31 @@ class AudioLibrary extends Model
     protected $fillable = [
         'title',
         'file_path',
+        'duration',
     ];
 
     public function bellSchedules(): HasMany
     {
         return $this->hasMany(BellSchedule::class);
+    }
+
+    /**
+     * Get formatted duration (MM:SS or HH:MM:SS)
+     */
+    public function getFormattedDurationAttribute(): string
+    {
+        if (!$this->duration) {
+            return '00:00';
+        }
+
+        $hours = floor($this->duration / 3600);
+        $minutes = floor(($this->duration % 3600) / 60);
+        $seconds = $this->duration % 60;
+
+        if ($hours > 0) {
+            return sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds);
+        }
+
+        return sprintf('%02d:%02d', $minutes, $seconds);
     }
 }

@@ -25,7 +25,9 @@
       "Bash(ren \"app\\View\\Components\\Layouts\\Public.php\" \"PublicLayout.php\")",
       "Bash(composer show:*)",
       "Bash(curl:*)",
-      "Bash(php -r:*)"
+      "Bash(php -r:*)",
+      "Bash(php check_durations.php:*)",
+      "Bash(del check_durations.php)"
     ],
     "deny": [],
     "ask": []

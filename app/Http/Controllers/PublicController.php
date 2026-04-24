@@ -87,6 +87,8 @@ class PublicController extends Controller
                         'id' => $schedule->audioLibrary->id,
                         'title' => $schedule->audioLibrary->title,
                         'file_url' => asset('storage/' . $schedule->audioLibrary->file_path),
+                        'duration' => $schedule->audioLibrary->duration,
+                        'duration_formatted' => $schedule->audioLibrary->formatted_duration,
                     ],
                 ];
             });

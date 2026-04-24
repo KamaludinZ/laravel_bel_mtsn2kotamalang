@@ -28,8 +28,9 @@ class BellScheduleController extends Controller
 
         $schedules = $query->orderBy('day')->orderBy('time')->paginate(20);
         $bellTypes = BellType::all();
+        $audioLibraries = AudioLibrary::all();
 
-        return view('bell-schedules.index', compact('schedules', 'bellTypes'));
+        return view('bell-schedules.index', compact('schedules', 'bellTypes', 'audioLibraries'));
     }
 
     /**
@@ -182,5 +183,89 @@ class BellScheduleController extends Controller
             $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
             $writer->save('php://output');
         }, 'template_jadwal_bel.xlsx', $headers);
+    }
+
+    /**
+     * Bulk update schedules.
+     */
+    public function bulkUpdate(Request $request)
+    {
+        try {
+            // Log all request data for debugging
+            \Log::info('Bulk Update Request:', $request->all());
+
+            $schedules = $request->input('schedules', []);
+
+            if (empty($schedules)) {
+                return redirect()->route('bell-schedules.index')
+                    ->with('error', 'Tidak ada data yang diupdate. Data yang diterima: ' . json_encode($request->all()));
+            }
+
+            $updatedCount = 0;
+            $errors = [];
+
+            foreach ($schedules as $scheduleId => $scheduleData) {
+                // Validate each schedule data
+                $validator = \Validator::make($scheduleData, [
+                    'id' => 'required|exists:bell_schedules,id',
+                    'bell_type_id' => 'required|exists:bell_types,id',
+                    'day' => 'required|in:monday,tuesday,wednesday,thursday,friday,saturday,sunday',
+                    'time' => 'required|date_format:H:i',
+                    'audio_library_id' => 'required|exists:audio_libraries,id',
+                    'keterangan' => 'nullable|string|max:500',
+                ]);
+
+                if ($validator->fails()) {
+                    $errors[] = "Schedule ID {$scheduleId}: " . implode(', ', $validator->errors()->all());
+                    \Log::warning("Validation failed for schedule {$scheduleId}", $validator->errors()->all());
+                    continue;
+                }
+
+                $schedule = BellSchedule::find($scheduleData['id']);
+                if ($schedule) {
+                    $schedule->update([
+                        'bell_type_id' => $scheduleData['bell_type_id'],
+                        'day' => $scheduleData['day'],
+                        'time' => $scheduleData['time'],
+                        'audio_library_id' => $scheduleData['audio_library_id'],
+                        'keterangan' => $scheduleData['keterangan'] ?? null,
+                    ]);
+                    $updatedCount++;
+                    \Log::info("Updated schedule {$scheduleData['id']}");
+                }
+            }
+
+            if (!empty($errors)) {
+                \Log::error('Bulk update errors:', $errors);
+            }
+
+            if ($updatedCount > 0) {
+                return redirect()->route('bell-schedules.index')
+                    ->with('success', "Berhasil mengupdate {$updatedCount} jadwal bel");
+            } else {
+                return redirect()->route('bell-schedules.index')
+                    ->with('error', 'Tidak ada jadwal yang berhasil diupdate. Errors: ' . implode('; ', $errors));
+            }
+        } catch (\Exception $e) {
+            \Log::error('Bulk update exception:', ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            return redirect()->route('bell-schedules.index')
+                ->with('error', 'Gagal mengupdate jadwal: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Bulk delete schedules.
+     */
+    public function bulkDestroy(Request $request)
+    {
+        $validated = $request->validate([
+            'schedule_ids' => 'required|array',
+            'schedule_ids.*' => 'exists:bell_schedules,id',
+        ]);
+
+        $deletedCount = BellSchedule::whereIn('id', $validated['schedule_ids'])->delete();
+
+        return redirect()->route('bell-schedules.index')
+            ->with('success', "Berhasil menghapus {$deletedCount} jadwal bel");
     }
 }

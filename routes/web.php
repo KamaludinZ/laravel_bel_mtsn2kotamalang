@@ -44,11 +44,15 @@ Route::middleware('auth')->group(function () {
     Route::get('bell-schedules/import', [BellScheduleController::class, 'importForm'])->name('bell-schedules.import.form');
     Route::post('bell-schedules/import', [BellScheduleController::class, 'import'])->name('bell-schedules.import');
     Route::get('bell-schedules/download-template', [BellScheduleController::class, 'downloadTemplate'])->name('bell-schedules.download-template');
+    Route::post('bell-schedules/bulk-update', [BellScheduleController::class, 'bulkUpdate'])->name('bell-schedules.bulk-update');
+    Route::post('bell-schedules/bulk-destroy', [BellScheduleController::class, 'bulkDestroy'])->name('bell-schedules.bulk-destroy');
     Route::resource('bell-schedules', BellScheduleController::class);
 
     // Settings Management
     Route::get('settings', [SettingController::class, 'index'])->name('settings.index');
     Route::post('settings', [SettingController::class, 'update'])->name('settings.update');
+    Route::post('settings/clear-cache', [SettingController::class, 'clearCache'])->name('settings.clear-cache');
+    Route::post('settings/clear-logs', [SettingController::class, 'clearLogs'])->name('settings.clear-logs');
 });
 
 require __DIR__.'/auth.php';
