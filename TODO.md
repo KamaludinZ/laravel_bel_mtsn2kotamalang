@@ -11,8 +11,15 @@
   - [x] Tambah konten informasi update dari repository GitHub
   - [x] Tampilkan versi sebelum (v1.0.0) dan sesudah perbaikan (v1.0.1)
 - [x] Review akhir perubahan
-- [ ] Implementasi fitur cek update + konfirmasi update 1 klik
-  - [ ] Tambah endpoint cek update dari GitHub
-  - [ ] Tambah endpoint proses update setelah konfirmasi
-  - [ ] Tambah tombol dan alur konfirmasi di tab Update (cek -> tanya -> proses)
-  - [ ] Tampilkan notifikasi jika tidak ada update / sukses / gagal
+- [x] Implementasi fitur cek update + konfirmasi update 1 klik
+  - [x] Tambah endpoint cek update dari GitHub
+  - [x] Tambah endpoint proses update setelah konfirmasi
+  - [x] Tambah tombol dan alur konfirmasi di tab Update (cek -> tanya -> proses)
+  - [x] Tampilkan notifikasi jika tidak ada update / sukses / gagal
+- [x] Ubah tampilan Update: hanya versi aplikasi saat ini + status update (tanpa versi sebelum/sesudah)
+- [x] Hapus tampilan link GitHub di tab Update
+- [ ] Tingkatkan ketahanan autoplay saat tab background
+  - [ ] Sinkronisasi waktu server periodik (`/api/current-time`)
+  - [ ] Tambah catch-up window agar jadwal yang terlewat saat background tetap diputar 1x
+  - [ ] Tambah listener `visibilitychange`, `focus`, `pageshow` untuk re-sync dan re-check cepat
+- [ ] Uji regresi fitur bel (Stop Paksa + autoplay 1x + background catch-up)

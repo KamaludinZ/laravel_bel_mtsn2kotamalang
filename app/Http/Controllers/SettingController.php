@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Http;
 use Symfony\Component\Process\Process;
 
 class SettingController extends Controller
@@ -355,86 +356,87 @@ class SettingController extends Controller
         }
     }
 
+    private function getRepositoryPath(): ?string
+    {
+        $configuredPath = Setting::get('update_repo_path');
+        $candidates = array_filter([
+            $configuredPath ?: null,
+            base_path(),
+            base_path('..'),
+            public_path('..'),
+        ]);
+
+        foreach ($candidates as $path) {
+            $realPath = realpath($path);
+            if (!$realPath || !is_dir($realPath)) {
+                continue;
+            }
+
+            $process = new Process(['git', 'rev-parse', '--is-inside-work-tree'], $realPath);
+            $process->run();
+
+            if ($process->isSuccessful() && trim($process->getOutput()) === 'true') {
+                return $realPath;
+            }
+        }
+
+        return null;
+    }
+
     /**
-     * Check update availability from GitHub remote.
+     * Check update availability from GitHub based on app version.
      */
     public function checkGithubUpdate()
     {
         try {
-            $repoPath = base_path();
+            $currentVersion = (string) config('app.version', 'v1.0.1');
 
-            // Verify git repo
-            $insideRepo = new Process(['git', 'rev-parse', '--is-inside-work-tree'], $repoPath);
-            $insideRepo->run();
+            $response = Http::timeout(20)
+                ->acceptJson()
+                ->get('https://api.github.com/repos/KamaludinZ/laravel_bel_mtsn2kotamalang/releases/latest');
 
-            if (!$insideRepo->isSuccessful() || trim($insideRepo->getOutput()) !== 'true') {
+            if (!$response->successful()) {
                 return redirect()->route('settings.index')
-                    ->with('error', 'Direktori aplikasi bukan repository git yang valid.');
+                    ->with('error', 'Gagal mengambil versi terbaru dari GitHub.')
+                    ->with('update_info', [
+                        'current_version' => $currentVersion,
+                    ]);
             }
 
-            // Validate origin remote
-            $originProcess = new Process(['git', 'remote', 'get-url', 'origin'], $repoPath);
-            $originProcess->run();
-
-            if (!$originProcess->isSuccessful()) {
+            $latestTag = (string) data_get($response->json(), 'tag_name', '');
+            if ($latestTag === '') {
                 return redirect()->route('settings.index')
-                    ->with('error', 'Gagal membaca remote origin repository.');
+                    ->with('error', 'Tag versi terbaru di GitHub tidak ditemukan.')
+                    ->with('update_info', [
+                        'current_version' => $currentVersion,
+                    ]);
             }
 
-            $originUrl = trim($originProcess->getOutput());
-            if (stripos($originUrl, 'KamaludinZ/laravel_bel_mtsn2kotamalang') === false) {
-                return redirect()->route('settings.index')
-                    ->with('error', 'Remote origin tidak sesuai dengan repository update yang ditentukan.');
-            }
+            $currentNormalized = ltrim(strtolower($currentVersion), 'v');
+            $latestNormalized = ltrim(strtolower($latestTag), 'v');
 
-            // Get current branch
-            $branchProcess = new Process(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], $repoPath);
-            $branchProcess->run();
-            $branch = $branchProcess->isSuccessful() ? trim($branchProcess->getOutput()) : 'main';
-
-            // Fetch latest
-            $fetchProcess = new Process(['git', 'fetch', 'origin'], $repoPath);
-            $fetchProcess->setTimeout(180);
-            $fetchProcess->run();
-
-            if (!$fetchProcess->isSuccessful()) {
-                return redirect()->route('settings.index')
-                    ->with('error', 'Gagal mengambil update terbaru dari origin.');
-            }
-
-            // Compare local vs remote
-            $localCommit = new Process(['git', 'rev-parse', 'HEAD'], $repoPath);
-            $localCommit->run();
-
-            $remoteCommit = new Process(['git', 'rev-parse', "origin/{$branch}"], $repoPath);
-            $remoteCommit->run();
-
-            if (!$localCommit->isSuccessful() || !$remoteCommit->isSuccessful()) {
-                return redirect()->route('settings.index')
-                    ->with('error', 'Gagal membandingkan versi lokal dan remote.');
-            }
-
-            $localHash = trim($localCommit->getOutput());
-            $remoteHash = trim($remoteCommit->getOutput());
-
-            if ($localHash === $remoteHash) {
-                return redirect()->route('settings.index')
-                    ->with('success', 'Tidak ada update terbaru. Aplikasi sudah versi paling baru.');
-            }
+            $needsUpdate = version_compare($latestNormalized, $currentNormalized, '>');
 
             return redirect()->route('settings.index')
-                ->with('update_available', true)
                 ->with('update_info', [
-                    'branch' => $branch,
-                    'local' => $localHash,
-                    'remote' => $remoteHash,
+                    'current_version' => $currentVersion,
+                    'latest_version' => $latestTag,
+                    'needs_update' => $needsUpdate,
                 ])
-                ->with('success', 'Update tersedia. Silakan konfirmasi untuk melanjutkan proses update.');
+                ->with(
+                    $needsUpdate ? 'success' : 'success',
+                    $needsUpdate
+                        ? 'Update tersedia. Versi terbaru ditemukan di GitHub.'
+                        : 'Aplikasi sudah menggunakan versi terbaru.'
+                );
         } catch (\Throwable $e) {
             Log::error('Check update error: ' . $e->getMessage());
 
             return redirect()->route('settings.index')
-                ->with('error', 'Terjadi kesalahan saat memeriksa update: ' . $e->getMessage());
+                ->with('error', 'Terjadi kesalahan saat memeriksa update: ' . $e->getMessage())
+                ->with('update_info', [
+                    'current_version' => (string) config('app.version', 'v1.0.1'),
+                ]);
         }
     }
 
@@ -448,10 +450,13 @@ class SettingController extends Controller
         ]);
 
         try {
-            $repoPath = base_path();
-            $outputLogs = [];
+            $repoPath = $this->getRepositoryPath();
+            if (!$repoPath) {
+                return redirect()->route('settings.index')
+                    ->with('error', 'Repository git tidak ditemukan di direktori aplikasi.');
+            }
 
-            // Re-validate repo and origin
+            $outputLogs = [];
             $originProcess = new Process(['git', 'remote', 'get-url', 'origin'], $repoPath);
             $originProcess->run();
 
@@ -466,7 +471,6 @@ class SettingController extends Controller
                     ->with('error', 'Remote origin tidak sesuai dengan repository update yang ditentukan.');
             }
 
-            // Detect branch
             $branchProcess = new Process(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], $repoPath);
             $branchProcess->run();
             $branch = $branchProcess->isSuccessful() ? trim($branchProcess->getOutput()) : 'main';

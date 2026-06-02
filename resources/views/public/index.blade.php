@@ -354,6 +354,11 @@
                 audioLibraries: @json($audioLibraries),
                 currentSchedulePlayingId: null,
                 lastTriggeredScheduleKey: null,
+                playedScheduleKeys: new Set(),
+                serverOffsetMs: 0,
+                serverSyncInterval: null,
+                scheduleRefreshInterval: null,
+                catchUpWindowSeconds: 90,
                 // Progress tracking
                 playbackProgress: 0,
                 currentTimeFormatted: '00:00',
@@ -367,8 +372,9 @@
                 init() {
                     this.updateClock();
                     this.fetchSchedule();
+                    this.syncServerTime();
 
-                    // Update clock every second
+                    // Update clock every second (based on server offset)
                     this.clockInterval = setInterval(() => {
                         this.updateClock();
                     }, 1000);
@@ -379,15 +385,60 @@
                     }, 5000);
 
                     // Fetch schedule every 5 minutes
-                    setInterval(() => {
+                    this.scheduleRefreshInterval = setInterval(() => {
                         this.fetchSchedule();
                     }, 300000);
+
+                    // Sync server time every 30 seconds
+                    this.serverSyncInterval = setInterval(() => {
+                        this.syncServerTime();
+                    }, 30000);
+
+                    // Re-check quickly when tab/app comes back to foreground
+                    document.addEventListener('visibilitychange', () => {
+                        if (!document.hidden) {
+                            this.syncServerTime();
+                            this.checkAndPlaySchedule(true);
+                        }
+                    });
+
+                    window.addEventListener('focus', () => {
+                        this.syncServerTime();
+                        this.checkAndPlaySchedule(true);
+                    });
+
+                    window.addEventListener('pageshow', () => {
+                        this.syncServerTime();
+                        this.checkAndPlaySchedule(true);
+                    });
                 },
 
                 updateClock() {
-                    const now = new Date();
+                    const now = this.getServerNow();
                     this.currentTime = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                     this.currentDate = now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                },
+
+                getServerNow() {
+                    return new Date(Date.now() + this.serverOffsetMs);
+                },
+
+                async syncServerTime() {
+                    try {
+                        const requestStart = Date.now();
+                        const response = await fetch('/api/current-time');
+                        const data = await response.json();
+                        const requestEnd = Date.now();
+
+                        if (data.success && data.datetime) {
+                            const serverTimeMs = new Date(data.datetime).getTime();
+                            const networkLatencyHalf = Math.floor((requestEnd - requestStart) / 2);
+                            const estimatedServerNow = serverTimeMs + networkLatencyHalf;
+                            this.serverOffsetMs = estimatedServerNow - Date.now();
+                        }
+                    } catch (error) {
+                        console.error('Error syncing server time:', error);
+                    }
                 },
 
                 async fetchSchedule() {
@@ -405,23 +456,35 @@
                     }
                 },
 
-                checkAndPlaySchedule() {
+                checkAndPlaySchedule(forceCatchUp = false) {
                     if (!this.isAutomatic) return;
 
-                    const now = new Date();
-                    const currentTimeStr = now.toTimeString().slice(0, 5); // HH:MM
+                    const now = this.getServerNow();
                     const currentDateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
 
                     this.schedules.forEach(schedule => {
-                        const scheduleKey = `${currentDateStr}-${schedule.id}-${currentTimeStr}`;
-                        // Play jika waktu cocok, belum diputar pada menit ini, dan tidak sedang play schedule yg sama
+                        const [hours, minutes] = (schedule.time || '00:00').split(':').map(Number);
+                        const scheduleDateTime = new Date(now);
+                        scheduleDateTime.setHours(hours || 0, minutes || 0, 0, 0);
+
+                        const diffSeconds = Math.floor((now.getTime() - scheduleDateTime.getTime()) / 1000);
+                        const scheduleMinuteKey = `${currentDateStr}-${schedule.id}-${schedule.time}`;
+
+                        // batas trigger:
+                        // - normal interval: toleransi 0..5 detik
+                        // - force catch-up saat kembali fokus: toleransi 0..catchUpWindowSeconds
+                        const allowedWindow = forceCatchUp ? this.catchUpWindowSeconds : 5;
+                        const isWithinWindow = diffSeconds >= 0 && diffSeconds <= allowedWindow;
+
                         if (
-                            schedule.time === currentTimeStr &&
-                            this.lastTriggeredScheduleKey !== scheduleKey &&
+                            isWithinWindow &&
+                            !this.playedScheduleKeys.has(scheduleMinuteKey) &&
+                            this.lastTriggeredScheduleKey !== scheduleMinuteKey &&
                             !this.isSchedulePlaying(schedule.id) &&
                             !(this.currentPlayingSchedule && this.currentPlayingSchedule.id === schedule.id)
                         ) {
-                            this.lastTriggeredScheduleKey = scheduleKey;
+                            this.lastTriggeredScheduleKey = scheduleMinuteKey;
+                            this.playedScheduleKeys.add(scheduleMinuteKey);
                             this.playAudio(schedule);
                         }
                     });

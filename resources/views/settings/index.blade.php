@@ -404,24 +404,30 @@
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                             <div class="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
-                                <p class="text-sm text-gray-500 dark:text-gray-400">Versi Sebelum Perbaikan</p>
-                                <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">v1.0.0</p>
+                                <p class="text-sm text-gray-500 dark:text-gray-400">Versi Aplikasi Saat Ini</p>
+                                <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                                    {{ session('update_info.current_version', config('app.version', 'v1.0.1')) }}
+                                </p>
                             </div>
-                            <div class="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-700">
-                                <p class="text-sm text-green-700 dark:text-green-300">Versi Setelah Perbaikan</p>
-                                <p class="text-2xl font-bold text-green-700 dark:text-green-300">v1.0.1</p>
+                            <div class="p-4 rounded-lg border
+                                {{ session('update_info.needs_update') ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700' : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700' }}">
+                                <p class="text-sm {{ session('update_info.needs_update') ? 'text-yellow-700 dark:text-yellow-300' : 'text-green-700 dark:text-green-300' }}">
+                                    Status Update
+                                </p>
+                                <p class="text-lg font-bold {{ session('update_info.needs_update') ? 'text-yellow-700 dark:text-yellow-300' : 'text-green-700 dark:text-green-300' }}">
+                                    {{ session('update_info.needs_update') ? 'Perlu Update' : 'Sudah Terbaru' }}
+                                </p>
+                                @if(session('update_info.latest_version'))
+                                    <p class="text-xs mt-1 {{ session('update_info.needs_update') ? 'text-yellow-700 dark:text-yellow-300' : 'text-green-700 dark:text-green-300' }}">
+                                        Versi GitHub: {{ session('update_info.latest_version') }}
+                                    </p>
+                                @endif
                             </div>
                         </div>
 
                         <div class="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
-                            <p class="text-sm text-blue-700 dark:text-blue-300 mb-2">Sumber Update (GitHub)</p>
-                            <a href="https://github.com/KamaludinZ/laravel_bel_mtsn2kotamalang"
-                               target="_blank"
-                               rel="noopener noreferrer"
-                               class="inline-flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:underline break-all">
-                                https://github.com/KamaludinZ/laravel_bel_mtsn2kotamalang
-                            </a>
-                            <p class="mt-3 text-sm text-gray-600 dark:text-gray-300">
+                            <p class="text-sm text-blue-700 dark:text-blue-300 mb-2">Informasi Update</p>
+                            <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
                                 Gunakan tombol di bawah untuk cek update. Jika tersedia, sistem akan meminta konfirmasi sebelum update diproses.
                             </p>
                         </div>
@@ -435,16 +441,9 @@
                                 </button>
                             </form>
 
-                            @if(session('update_available'))
+                            @if(session('update_info.needs_update'))
                                 <div class="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-700">
                                     <p class="text-sm text-yellow-700 dark:text-yellow-300 font-semibold mb-2">Update tersedia</p>
-                                    @if(session('update_info'))
-                                        <ul class="text-xs text-yellow-700 dark:text-yellow-300 space-y-1 mb-3">
-                                            <li><strong>Branch:</strong> {{ session('update_info.branch') }}</li>
-                                            <li><strong>Local:</strong> {{ session('update_info.local') }}</li>
-                                            <li><strong>Remote:</strong> {{ session('update_info.remote') }}</li>
-                                        </ul>
-                                    @endif
                                     <form action="{{ route('settings.run-update') }}" method="POST" onsubmit="return confirm('Update ditemukan. Lanjutkan proses update sekarang?')">
                                         @csrf
                                         <input type="hidden" name="confirm_update" value="1">
