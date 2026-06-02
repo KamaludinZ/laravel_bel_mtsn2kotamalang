@@ -27,7 +27,8 @@
       "Bash(curl:*)",
       "Bash(php -r:*)",
       "Bash(php check_durations.php:*)",
-      "Bash(del check_durations.php)"
+      "Bash(del check_durations.php)",
+      "Bash(tar:*)"
     ],
     "deny": [],
     "ask": []

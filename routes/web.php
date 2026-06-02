@@ -53,6 +53,8 @@ Route::middleware('auth')->group(function () {
     Route::post('settings', [SettingController::class, 'update'])->name('settings.update');
     Route::post('settings/clear-cache', [SettingController::class, 'clearCache'])->name('settings.clear-cache');
     Route::post('settings/clear-logs', [SettingController::class, 'clearLogs'])->name('settings.clear-logs');
+    Route::post('settings/check-update', [SettingController::class, 'checkGithubUpdate'])->name('settings.check-update');
+    Route::post('settings/run-update', [SettingController::class, 'runGithubUpdate'])->name('settings.run-update');
 });
 
 require __DIR__.'/auth.php';

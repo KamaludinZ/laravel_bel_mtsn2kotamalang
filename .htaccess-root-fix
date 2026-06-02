@@ -1,0 +1,22 @@
+# Upload file ini ke root subdomain Anda
+# Rename menjadi .htaccess (ganti nama dari .htaccess-root-fix jadi .htaccess)
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # Redirect semua traffic ke folder public/
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+# Matikan directory listing
+Options -Indexes
+
+# Arahkan index ke public/index.php
+DirectoryIndex public/index.php
+
+# Lindungi file .env
+<Files .env>
+    Order allow,deny
+    Deny from all
+</Files>

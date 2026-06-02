@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Artisan;
+use Symfony\Component\Process\Process;
 
 class SettingController extends Controller
 {
@@ -351,6 +352,159 @@ class SettingController extends Controller
         } catch (\Exception $e) {
             return redirect()->route('settings.index')
                 ->with('error', 'Gagal membersihkan log: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Check update availability from GitHub remote.
+     */
+    public function checkGithubUpdate()
+    {
+        try {
+            $repoPath = base_path();
+
+            // Verify git repo
+            $insideRepo = new Process(['git', 'rev-parse', '--is-inside-work-tree'], $repoPath);
+            $insideRepo->run();
+
+            if (!$insideRepo->isSuccessful() || trim($insideRepo->getOutput()) !== 'true') {
+                return redirect()->route('settings.index')
+                    ->with('error', 'Direktori aplikasi bukan repository git yang valid.');
+            }
+
+            // Validate origin remote
+            $originProcess = new Process(['git', 'remote', 'get-url', 'origin'], $repoPath);
+            $originProcess->run();
+
+            if (!$originProcess->isSuccessful()) {
+                return redirect()->route('settings.index')
+                    ->with('error', 'Gagal membaca remote origin repository.');
+            }
+
+            $originUrl = trim($originProcess->getOutput());
+            if (stripos($originUrl, 'KamaludinZ/laravel_bel_mtsn2kotamalang') === false) {
+                return redirect()->route('settings.index')
+                    ->with('error', 'Remote origin tidak sesuai dengan repository update yang ditentukan.');
+            }
+
+            // Get current branch
+            $branchProcess = new Process(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], $repoPath);
+            $branchProcess->run();
+            $branch = $branchProcess->isSuccessful() ? trim($branchProcess->getOutput()) : 'main';
+
+            // Fetch latest
+            $fetchProcess = new Process(['git', 'fetch', 'origin'], $repoPath);
+            $fetchProcess->setTimeout(180);
+            $fetchProcess->run();
+
+            if (!$fetchProcess->isSuccessful()) {
+                return redirect()->route('settings.index')
+                    ->with('error', 'Gagal mengambil update terbaru dari origin.');
+            }
+
+            // Compare local vs remote
+            $localCommit = new Process(['git', 'rev-parse', 'HEAD'], $repoPath);
+            $localCommit->run();
+
+            $remoteCommit = new Process(['git', 'rev-parse', "origin/{$branch}"], $repoPath);
+            $remoteCommit->run();
+
+            if (!$localCommit->isSuccessful() || !$remoteCommit->isSuccessful()) {
+                return redirect()->route('settings.index')
+                    ->with('error', 'Gagal membandingkan versi lokal dan remote.');
+            }
+
+            $localHash = trim($localCommit->getOutput());
+            $remoteHash = trim($remoteCommit->getOutput());
+
+            if ($localHash === $remoteHash) {
+                return redirect()->route('settings.index')
+                    ->with('success', 'Tidak ada update terbaru. Aplikasi sudah versi paling baru.');
+            }
+
+            return redirect()->route('settings.index')
+                ->with('update_available', true)
+                ->with('update_info', [
+                    'branch' => $branch,
+                    'local' => $localHash,
+                    'remote' => $remoteHash,
+                ])
+                ->with('success', 'Update tersedia. Silakan konfirmasi untuk melanjutkan proses update.');
+        } catch (\Throwable $e) {
+            Log::error('Check update error: ' . $e->getMessage());
+
+            return redirect()->route('settings.index')
+                ->with('error', 'Terjadi kesalahan saat memeriksa update: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Run update process from GitHub after user confirmation.
+     */
+    public function runGithubUpdate(Request $request)
+    {
+        $request->validate([
+            'confirm_update' => 'required|accepted',
+        ]);
+
+        try {
+            $repoPath = base_path();
+            $outputLogs = [];
+
+            // Re-validate repo and origin
+            $originProcess = new Process(['git', 'remote', 'get-url', 'origin'], $repoPath);
+            $originProcess->run();
+
+            if (!$originProcess->isSuccessful()) {
+                return redirect()->route('settings.index')
+                    ->with('error', 'Gagal membaca remote origin repository.');
+            }
+
+            $originUrl = trim($originProcess->getOutput());
+            if (stripos($originUrl, 'KamaludinZ/laravel_bel_mtsn2kotamalang') === false) {
+                return redirect()->route('settings.index')
+                    ->with('error', 'Remote origin tidak sesuai dengan repository update yang ditentukan.');
+            }
+
+            // Detect branch
+            $branchProcess = new Process(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], $repoPath);
+            $branchProcess->run();
+            $branch = $branchProcess->isSuccessful() ? trim($branchProcess->getOutput()) : 'main';
+
+            $commands = [
+                ['git', 'fetch', 'origin'],
+                ['git', 'reset', '--hard', "origin/{$branch}"],
+                ['composer', 'install', '--no-interaction', '--prefer-dist', '--optimize-autoloader'],
+                ['php', 'artisan', 'migrate', '--force'],
+                ['php', 'artisan', 'optimize:clear'],
+            ];
+
+            foreach ($commands as $command) {
+                $process = new Process($command, $repoPath);
+                $process->setTimeout(600);
+                $process->run();
+
+                $outputLogs[] = '$ ' . implode(' ', $command);
+                $combinedOutput = trim($process->getOutput() . PHP_EOL . $process->getErrorOutput());
+                if (!empty($combinedOutput)) {
+                    $outputLogs[] = $combinedOutput;
+                }
+
+                if (!$process->isSuccessful()) {
+                    return redirect()->route('settings.index')
+                        ->with('error', 'Proses update gagal pada perintah: ' . implode(' ', $command))
+                        ->with('update_logs', $outputLogs);
+                }
+            }
+
+            return redirect()->route('settings.index')
+                ->with('success', 'Update berhasil diproses ke versi terbaru (v1.0.1).')
+                ->with('update_logs', $outputLogs);
+        } catch (\Throwable $e) {
+            Log::error('Run update error: ' . $e->getMessage());
+
+            return redirect()->route('settings.index')
+                ->with('error', 'Terjadi kesalahan saat proses update: ' . $e->getMessage());
         }
     }
 

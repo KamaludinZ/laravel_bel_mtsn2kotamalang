@@ -41,6 +41,9 @@
                         <button onclick="switchTab('database')" id="tab-database" class="tab-button border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300 dark:hover:text-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
                             Database
                         </button>
+                        <button onclick="switchTab('update')" id="tab-update" class="tab-button border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300 dark:hover:text-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                            Update
+                        </button>
                     </nav>
                 </div>
             </div>
@@ -388,6 +391,77 @@
                                     @endforelse
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Content: Update -->
+            <div id="content-update" class="tab-content hidden">
+                <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg mb-6">
+                    <div class="p-6">
+                        <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">Update Aplikasi</h3>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <div class="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
+                                <p class="text-sm text-gray-500 dark:text-gray-400">Versi Sebelum Perbaikan</p>
+                                <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">v1.0.0</p>
+                            </div>
+                            <div class="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-700">
+                                <p class="text-sm text-green-700 dark:text-green-300">Versi Setelah Perbaikan</p>
+                                <p class="text-2xl font-bold text-green-700 dark:text-green-300">v1.0.1</p>
+                            </div>
+                        </div>
+
+                        <div class="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+                            <p class="text-sm text-blue-700 dark:text-blue-300 mb-2">Sumber Update (GitHub)</p>
+                            <a href="https://github.com/KamaludinZ/laravel_bel_mtsn2kotamalang"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               class="inline-flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:underline break-all">
+                                https://github.com/KamaludinZ/laravel_bel_mtsn2kotamalang
+                            </a>
+                            <p class="mt-3 text-sm text-gray-600 dark:text-gray-300">
+                                Gunakan tombol di bawah untuk cek update. Jika tersedia, sistem akan meminta konfirmasi sebelum update diproses.
+                            </p>
+                        </div>
+
+                        <div class="mt-6 space-y-4">
+                            <form action="{{ route('settings.check-update') }}" method="POST">
+                                @csrf
+                                <button type="submit"
+                                    class="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-blue-700 transition">
+                                    Cek Update
+                                </button>
+                            </form>
+
+                            @if(session('update_available'))
+                                <div class="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-700">
+                                    <p class="text-sm text-yellow-700 dark:text-yellow-300 font-semibold mb-2">Update tersedia</p>
+                                    @if(session('update_info'))
+                                        <ul class="text-xs text-yellow-700 dark:text-yellow-300 space-y-1 mb-3">
+                                            <li><strong>Branch:</strong> {{ session('update_info.branch') }}</li>
+                                            <li><strong>Local:</strong> {{ session('update_info.local') }}</li>
+                                            <li><strong>Remote:</strong> {{ session('update_info.remote') }}</li>
+                                        </ul>
+                                    @endif
+                                    <form action="{{ route('settings.run-update') }}" method="POST" onsubmit="return confirm('Update ditemukan. Lanjutkan proses update sekarang?')">
+                                        @csrf
+                                        <input type="hidden" name="confirm_update" value="1">
+                                        <button type="submit"
+                                            class="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-700 transition">
+                                            Ya, Lanjutkan Update
+                                        </button>
+                                    </form>
+                                </div>
+                            @endif
+
+                            @if(session('update_logs'))
+                                <div class="p-4 bg-gray-900 text-green-300 rounded-lg overflow-auto">
+                                    <p class="text-xs font-semibold mb-2 text-gray-200">Log Proses Update:</p>
+                                    <pre class="text-xs whitespace-pre-wrap">{{ implode("\n\n", session('update_logs')) }}</pre>
+                                </div>
+                            @endif
                         </div>
                     </div>
                 </div>

@@ -181,6 +181,15 @@
                                                             <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
                                                         </svg>
                                                     </button>
+                                                    <button @click="forceStopScheduleAudio(schedule.id)"
+                                                        :disabled="!isSchedulePlaying(schedule.id) && !(currentPlayingSchedule && currentPlayingSchedule.id === schedule.id)"
+                                                        :class="(!isSchedulePlaying(schedule.id) && !(currentPlayingSchedule && currentPlayingSchedule.id === schedule.id)) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-orange-600'"
+                                                        class="bg-orange-500 text-white p-1.5 rounded transition-colors"
+                                                        title="Stop Paksa">
+                                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path d="M5 4a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V5a1 1 0 00-1-1H5z"/>
+                                                        </svg>
+                                                    </button>
                                                 </div>
                                             </td>
                                             @endauth
@@ -286,18 +295,6 @@
                                     Pause
                                 </button>
                             </div>
-
-                            <!-- Progress Bar & Timer for Manual Audio -->
-                            <div x-show="isManualPlaying" class="space-y-2">
-                                <div class="flex justify-between text-xs text-white/80">
-                                    <span x-text="manualCurrentTimeFormatted">00:00</span>
-                                    <span x-text="manualDurationFormatted">00:00</span>
-                                </div>
-                                <div class="w-full bg-white/20 rounded-full h-2">
-                                    <div class="bg-green-500 h-2 rounded-full transition-all duration-300" :style="`width: ${manualProgress}%`"></div>
-                                </div>
-                                <p class="text-white/70 text-xs text-center">🎵 Audio sedang diputar...</p>
-                            </div>
                         </div>
                     </div>
 
@@ -356,6 +353,7 @@
                 isManualPlaying: false,
                 audioLibraries: @json($audioLibraries),
                 currentSchedulePlayingId: null,
+                lastTriggeredScheduleKey: null,
                 // Progress tracking
                 playbackProgress: 0,
                 currentTimeFormatted: '00:00',
@@ -412,10 +410,18 @@
 
                     const now = new Date();
                     const currentTimeStr = now.toTimeString().slice(0, 5); // HH:MM
+                    const currentDateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
 
                     this.schedules.forEach(schedule => {
-                        // Play if time matches and not currently playing
-                        if (schedule.time === currentTimeStr && !this.isCurrentSchedule(schedule)) {
+                        const scheduleKey = `${currentDateStr}-${schedule.id}-${currentTimeStr}`;
+                        // Play jika waktu cocok, belum diputar pada menit ini, dan tidak sedang play schedule yg sama
+                        if (
+                            schedule.time === currentTimeStr &&
+                            this.lastTriggeredScheduleKey !== scheduleKey &&
+                            !this.isSchedulePlaying(schedule.id) &&
+                            !(this.currentPlayingSchedule && this.currentPlayingSchedule.id === schedule.id)
+                        ) {
+                            this.lastTriggeredScheduleKey = scheduleKey;
                             this.playAudio(schedule);
                         }
                     });
@@ -423,6 +429,7 @@
 
                 playAudio(schedule) {
                     this.currentPlayingSchedule = schedule;
+                    this.currentSchedulePlayingId = schedule.id;
                     this.nowPlayingTitle = schedule.audio.title;
                     const audio = this.$refs.audioPlayer;
                     audio.src = schedule.audio.file_url;
@@ -434,16 +441,19 @@
                         })
                         .catch(error => {
                             console.error('Error playing audio:', error);
+                            this.currentPlayingSchedule = null;
+                            this.currentSchedulePlayingId = null;
                         });
 
                     audio.onended = () => {
                         this.currentPlayingSchedule = null;
+                        this.currentSchedulePlayingId = null;
                         this.stopProgressTracking();
                     };
                 },
 
                 isCurrentSchedule(schedule) {
-                    return this.currentPlayingSchedule && this.currentPlayingSchedule.id === schedule.id;
+                    return this.currentPlayingSchedule?.id === schedule.id;
                 },
 
                 playManualAudio() {
@@ -460,7 +470,7 @@
                         .then(() => {
                             this.isManualPlaying = true;
                             console.log('Manual playing:', selectedAudio.title);
-                            this.startManualProgressTracking(manualPlayer, selectedAudio.duration);
+                            this.startProgressTracking(manualPlayer, selectedAudio.duration);
                         })
                         .catch(error => {
                             console.error('Error playing manual audio:', error);
@@ -469,7 +479,7 @@
 
                     manualPlayer.onended = () => {
                         this.isManualPlaying = false;
-                        this.stopManualProgressTracking();
+                        this.stopProgressTracking();
                     };
                 },
 
@@ -477,7 +487,7 @@
                     const manualPlayer = this.$refs.manualAudioPlayer;
                     manualPlayer.pause();
                     this.isManualPlaying = false;
-                    this.stopManualProgressTracking();
+                    this.stopProgressTracking();
                 },
 
                 playScheduleAudio(schedule) {
@@ -506,9 +516,29 @@
 
                 pauseScheduleAudio() {
                     const schedulePlayer = this.$refs.scheduleAudioPlayer;
-                    schedulePlayer.pause();
+                    const autoPlayer = this.$refs.audioPlayer;
+
+                    if (!schedulePlayer.paused) {
+                        schedulePlayer.pause();
+                        schedulePlayer.currentTime = 0;
+                    }
+
+                    if (!autoPlayer.paused) {
+                        autoPlayer.pause();
+                        autoPlayer.currentTime = 0;
+                    }
+
                     this.currentSchedulePlayingId = null;
+                    this.currentPlayingSchedule = null;
                     this.stopProgressTracking();
+                },
+
+                forceStopScheduleAudio(scheduleId) {
+                    if (!this.isSchedulePlaying(scheduleId) && !(this.currentPlayingSchedule && this.currentPlayingSchedule.id === scheduleId)) {
+                        return;
+                    }
+
+                    this.pauseScheduleAudio();
                 },
 
                 isSchedulePlaying(scheduleId) {

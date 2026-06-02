@@ -1,5 +1,47 @@
 # Panduan Deployment Production
 
+## ⚠️ PENTING: Masalah CSS Tidak Muncul di Production
+
+### Gejala
+Di browser console muncul error:
+```
+Access to script at 'http://[::1]:5173/@vite/client' from origin 'http://app1.mtsn2kotamalang.sch.id' has been blocked by CORS policy
+GET http://[::1]:5173/@vite/client net::ERR_FAILED
+GET http://[::1]:5173/resources/css/app.css net::ERR_FAILED
+```
+
+### Penyebab
+Aplikasi masih mencoba mengakses Vite dev server (`http://[::1]:5173`) padahal di production harus menggunakan file yang sudah di-build di `public/build/`.
+
+### Solusi Cepat
+
+**1. Update File `.env` di Server Production**
+```env
+APP_ENV=production   ← UBAH DARI local KE production
+APP_DEBUG=false       ← UBAH DARI true KE false
+APP_URL=http://app1.mtsn2kotamalang.sch.id
+```
+
+**2. Build Assets di Local**
+```bash
+npm run build
+```
+
+**3. Upload Folder `public/build/` ke Server**
+Upload seluruh folder `public/build/` beserta isinya ke server production.
+
+**4. Clear Cache di Server**
+```bash
+php artisan config:clear
+php artisan cache:clear
+php artisan view:clear
+```
+
+**5. Refresh Browser**
+Hard refresh browser dengan Ctrl+F5 atau Cmd+Shift+R
+
+---
+
 ## 📋 Checklist Pre-Deployment
 
 ### 1. Environment Configuration
