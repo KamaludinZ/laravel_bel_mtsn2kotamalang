@@ -41,6 +41,9 @@
                         <button onclick="switchTab('database')" id="tab-database" class="tab-button border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300 dark:hover:text-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
                             Database
                         </button>
+                        <button onclick="switchTab('backup')" id="tab-backup" class="tab-button border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300 dark:hover:text-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                            Backup & Restore
+                        </button>
                         <button onclick="switchTab('update')" id="tab-update" class="tab-button border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300 dark:hover:text-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
                             Update
                         </button>
@@ -478,6 +481,190 @@
                 </div>
             </div>
 
+            <!-- Tab Content: Backup & Restore -->
+            <div id="content-backup" class="tab-content hidden">
+                <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg mb-6">
+                    <div class="p-6">
+                        <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">Backup & Restore</h3>
+
+                        <div class="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700 mb-6">
+                            <p class="text-sm text-blue-700 dark:text-blue-300 mb-2 font-semibold">⚠️ Penting</p>
+                            <ul class="text-xs text-gray-600 dark:text-gray-300 list-disc list-inside space-y-1">
+                                <li>Backup mencakup database (jadwal bel, audio, users) dan files (.env, audio, logos)</li>
+                                <li>Restore akan menimpa data yang ada - pastikan backup sudah benar</li>
+                                <li>Simpan file backup di lokasi aman (download ke komputer lokal)</li>
+                                <li>Lakukan backup secara berkala (minimal 1x seminggu)</li>
+                            </ul>
+                        </div>
+
+                        <!-- Create Backup Section -->
+                        <div class="mb-8">
+                            <h4 class="text-md font-semibold mb-3 text-gray-900 dark:text-gray-100">Buat Backup Baru</h4>
+
+                            <form action="{{ route('settings.backup.create') }}" method="POST" class="space-y-4">
+                                @csrf
+
+                                <div>
+                                    <label class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300">
+                                        Tipe Backup <span class="text-red-500">*</span>
+                                    </label>
+                                    <select name="backup_type" required
+                                        class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                                        <option value="full">Full Backup (Database + Files)</option>
+                                        <option value="database">Database Only</option>
+                                        <option value="files">Files Only (.env, audio, logos)</option>
+                                    </select>
+                                </div>
+
+                                <button type="submit"
+                                    class="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-blue-700 transition">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                                    </svg>
+                                    Buat Backup Sekarang
+                                </button>
+                            </form>
+                        </div>
+
+                        <hr class="my-6 border-gray-200 dark:border-gray-700">
+
+                        <!-- Backups List -->
+                        <div>
+                            <h4 class="text-md font-semibold mb-3 text-gray-900 dark:text-gray-100">
+                                Daftar Backup ({{ count($backups) }})
+                            </h4>
+
+                            @if(count($backups) > 0)
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
+                                        <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+                                            <tr>
+                                                <th class="px-4 py-3">Nama File</th>
+                                                <th class="px-4 py-3">Tanggal</th>
+                                                <th class="px-4 py-3">Ukuran</th>
+                                                <th class="px-4 py-3">Tipe</th>
+                                                <th class="px-4 py-3 text-right">Aksi</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach($backups as $backup)
+                                                <tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+                                                    <td class="px-4 py-3 font-medium text-gray-900 dark:text-white">
+                                                        {{ $backup['name'] }}
+                                                    </td>
+                                                    <td class="px-4 py-3">
+                                                        {{ $backup['date'] }}
+                                                    </td>
+                                                    <td class="px-4 py-3">
+                                                        {{ $backup['size'] }}
+                                                    </td>
+                                                    <td class="px-4 py-3">
+                                                        @if(str_contains($backup['name'], 'database'))
+                                                            <span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
+                                                                Database
+                                                            </span>
+                                                        @elseif(str_contains($backup['name'], 'files'))
+                                                            <span class="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
+                                                                Files
+                                                            </span>
+                                                        @else
+                                                            <span class="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300">
+                                                                Full
+                                                            </span>
+                                                        @endif
+                                                    </td>
+                                                    <td class="px-4 py-3 text-right">
+                                                        <div class="flex justify-end gap-2">
+                                                            <!-- Download Button -->
+                                                            <a href="{{ route('settings.backup.download', $backup['name']) }}"
+                                                                class="inline-flex items-center px-3 py-1 bg-green-600 text-white text-xs font-semibold rounded hover:bg-green-700 transition">
+                                                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                                                </svg>
+                                                                Download
+                                                            </a>
+
+                                                            <!-- Restore Button -->
+                                                            <button type="button" onclick="confirmRestore('{{ $backup['name'] }}')"
+                                                                class="inline-flex items-center px-3 py-1 bg-yellow-600 text-white text-xs font-semibold rounded hover:bg-yellow-700 transition">
+                                                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                                </svg>
+                                                                Restore
+                                                            </button>
+
+                                                            <!-- Delete Button -->
+                                                            <form action="{{ route('settings.backup.delete', $backup['name']) }}" method="POST" class="inline"
+                                                                onsubmit="return confirm('Hapus backup ini? Aksi tidak dapat dibatalkan.')">
+                                                                @csrf
+                                                                @method('DELETE')
+                                                                <button type="submit"
+                                                                    class="inline-flex items-center px-3 py-1 bg-red-600 text-white text-xs font-semibold rounded hover:bg-red-700 transition">
+                                                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                    </svg>
+                                                                    Hapus
+                                                                </button>
+                                                            </form>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            @else
+                                <div class="text-center py-8 text-gray-500 dark:text-gray-400">
+                                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                                    </svg>
+                                    <p class="mt-2">Belum ada backup. Buat backup pertama Anda sekarang!</p>
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Restore Confirmation Modal -->
+            <div id="restoreModal" class="hidden fixed inset-0 bg-black bg-opacity-60 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+                <div class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6">
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">⚠️ Konfirmasi Restore</h3>
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                        Restore akan menimpa semua data yang ada dengan data dari backup. Proses ini tidak dapat dibatalkan.
+                    </p>
+                    <p class="text-sm font-semibold text-red-600 dark:text-red-400 mb-6">
+                        Pastikan Anda sudah membuat backup terbaru sebelum restore!
+                    </p>
+
+                    <form action="{{ route('settings.backup.restore') }}" method="POST" id="restoreForm">
+                        @csrf
+                        <input type="hidden" name="backup_file" id="restoreFileName">
+
+                        <div class="mb-4">
+                            <label class="flex items-center">
+                                <input type="checkbox" name="confirm_restore" value="1" required
+                                    class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600">
+                                <span class="ml-2 text-sm text-gray-900 dark:text-gray-300">
+                                    Saya mengerti dan ingin melanjutkan restore
+                                </span>
+                            </label>
+                        </div>
+
+                        <div class="flex gap-3">
+                            <button type="button" onclick="closeRestoreModal()"
+                                class="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition">
+                                Batal
+                            </button>
+                            <button type="submit"
+                                class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
+                                Ya, Restore Sekarang
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
             <!-- Tab Content: Update -->
             <div id="content-update" class="tab-content hidden">
                 <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg mb-6">
@@ -574,6 +761,17 @@
     </div>
 
     <script>
+        // Restore Modal Functions
+        function confirmRestore(filename) {
+            document.getElementById('restoreFileName').value = filename;
+            document.getElementById('restoreModal').classList.remove('hidden');
+        }
+
+        function closeRestoreModal() {
+            document.getElementById('restoreModal').classList.add('hidden');
+            document.getElementById('restoreForm').reset();
+        }
+
         function switchTab(tabName) {
             // Hide all content
             document.querySelectorAll('.tab-content').forEach(content => {

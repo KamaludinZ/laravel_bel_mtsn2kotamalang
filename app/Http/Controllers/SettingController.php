@@ -29,7 +29,10 @@ class SettingController extends Controller
         // Get monitoring data
         $monitoring = $this->getMonitoringData();
 
-        return view('settings.index', compact('appName', 'appLogo', 'monitoring', 'hardwareEnabled'));
+        // Get backups list
+        $backups = $this->listBackups();
+
+        return view('settings.index', compact('appName', 'appLogo', 'monitoring', 'hardwareEnabled', 'backups'));
     }
 
     /**
@@ -577,5 +580,363 @@ class SettingController extends Controller
 
         return redirect()->route('settings.index')
             ->with('success', $message);
+    }
+
+    /**
+     * List all available backups
+     */
+    public function listBackups()
+    {
+        $backupPath = storage_path('app/backups');
+
+        if (!File::exists($backupPath)) {
+            File::makeDirectory($backupPath, 0755, true);
+        }
+
+        $backups = collect(File::files($backupPath))
+            ->map(function ($file) {
+                return [
+                    'name' => $file->getFilename(),
+                    'path' => $file->getPathname(),
+                    'size' => $this->formatBytes($file->getSize()),
+                    'size_bytes' => $file->getSize(),
+                    'date' => date('Y-m-d H:i:s', $file->getMTime()),
+                    'timestamp' => $file->getMTime(),
+                ];
+            })
+            ->sortByDesc('timestamp')
+            ->values()
+            ->all();
+
+        return $backups;
+    }
+
+    /**
+     * Create full backup (database + files)
+     */
+    public function createBackup(Request $request)
+    {
+        $request->validate([
+            'backup_type' => 'required|in:full,database,files',
+        ]);
+
+        try {
+            $timestamp = date('Y-m-d_His');
+            $backupType = $request->backup_type;
+            $backupPath = storage_path('app/backups');
+
+            if (!File::exists($backupPath)) {
+                File::makeDirectory($backupPath, 0755, true);
+            }
+
+            $logs = [];
+
+            // Backup Database
+            if (in_array($backupType, ['full', 'database'])) {
+                $dbBackup = $this->backupDatabase($timestamp);
+                $logs[] = $dbBackup['message'];
+            }
+
+            // Backup Files
+            if (in_array($backupType, ['full', 'files'])) {
+                $filesBackup = $this->backupFiles($timestamp);
+                $logs[] = $filesBackup['message'];
+            }
+
+            return redirect()->route('settings.index')
+                ->with('success', 'Backup berhasil dibuat!')
+                ->with('backup_logs', $logs);
+
+        } catch (\Exception $e) {
+            Log::error('Backup error: ' . $e->getMessage());
+            return redirect()->route('settings.index')
+                ->with('error', 'Gagal membuat backup: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Backup database to SQL file
+     */
+    private function backupDatabase($timestamp)
+    {
+        $dbConnection = config('database.default');
+        $dbConfig = config("database.connections.{$dbConnection}");
+
+        $backupPath = storage_path('app/backups');
+        $filename = "database_{$timestamp}.sql";
+        $filepath = "{$backupPath}/{$filename}";
+
+        if ($dbConfig['driver'] === 'pgsql') {
+            // PostgreSQL backup
+            $command = sprintf(
+                'pg_dump -h %s -p %s -U %s -d %s > %s',
+                escapeshellarg($dbConfig['host']),
+                escapeshellarg($dbConfig['port']),
+                escapeshellarg($dbConfig['username']),
+                escapeshellarg($dbConfig['database']),
+                escapeshellarg($filepath)
+            );
+
+            // Set PGPASSWORD environment variable
+            putenv("PGPASSWORD=" . $dbConfig['password']);
+
+            exec($command . ' 2>&1', $output, $returnCode);
+
+            putenv("PGPASSWORD");
+
+            if ($returnCode !== 0) {
+                throw new \Exception("PostgreSQL backup failed: " . implode("\n", $output));
+            }
+
+        } elseif ($dbConfig['driver'] === 'mysql') {
+            // MySQL backup
+            $command = sprintf(
+                'mysqldump -h %s -P %s -u %s -p%s %s > %s',
+                escapeshellarg($dbConfig['host']),
+                escapeshellarg($dbConfig['port'] ?? 3306),
+                escapeshellarg($dbConfig['username']),
+                escapeshellarg($dbConfig['password']),
+                escapeshellarg($dbConfig['database']),
+                escapeshellarg($filepath)
+            );
+
+            exec($command . ' 2>&1', $output, $returnCode);
+
+            if ($returnCode !== 0) {
+                throw new \Exception("MySQL backup failed: " . implode("\n", $output));
+            }
+        } else {
+            throw new \Exception("Database driver {$dbConfig['driver']} not supported for backup");
+        }
+
+        $size = $this->formatBytes(filesize($filepath));
+        return [
+            'success' => true,
+            'file' => $filename,
+            'message' => "Database backup created: {$filename} ({$size})"
+        ];
+    }
+
+    /**
+     * Backup important files (storage, .env, etc)
+     */
+    private function backupFiles($timestamp)
+    {
+        $backupPath = storage_path('app/backups');
+        $filename = "files_{$timestamp}.zip";
+        $filepath = "{$backupPath}/{$filename}";
+
+        $zip = new \ZipArchive();
+
+        if ($zip->open($filepath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            throw new \Exception("Cannot create ZIP file");
+        }
+
+        // Backup directories
+        $directoriesToBackup = [
+            storage_path('app/public/audio'),
+            storage_path('app/public/logos'),
+        ];
+
+        // Backup files
+        $filesToBackup = [
+            base_path('.env'),
+        ];
+
+        // Add directories
+        foreach ($directoriesToBackup as $dir) {
+            if (File::exists($dir)) {
+                $files = File::allFiles($dir);
+                foreach ($files as $file) {
+                    $relativePath = str_replace(base_path() . DIRECTORY_SEPARATOR, '', $file->getRealPath());
+                    $zip->addFile($file->getRealPath(), $relativePath);
+                }
+            }
+        }
+
+        // Add individual files
+        foreach ($filesToBackup as $file) {
+            if (File::exists($file)) {
+                $relativePath = str_replace(base_path() . DIRECTORY_SEPARATOR, '', $file);
+                $zip->addFile($file, $relativePath);
+            }
+        }
+
+        $zip->close();
+
+        $size = $this->formatBytes(filesize($filepath));
+        return [
+            'success' => true,
+            'file' => $filename,
+            'message' => "Files backup created: {$filename} ({$size})"
+        ];
+    }
+
+    /**
+     * Download backup file
+     */
+    public function downloadBackup($filename)
+    {
+        $filepath = storage_path('app/backups/' . $filename);
+
+        if (!File::exists($filepath)) {
+            return redirect()->route('settings.index')
+                ->with('error', 'File backup tidak ditemukan');
+        }
+
+        return response()->download($filepath);
+    }
+
+    /**
+     * Delete backup file
+     */
+    public function deleteBackup($filename)
+    {
+        $filepath = storage_path('app/backups/' . $filename);
+
+        if (!File::exists($filepath)) {
+            return redirect()->route('settings.index')
+                ->with('error', 'File backup tidak ditemukan');
+        }
+
+        File::delete($filepath);
+
+        return redirect()->route('settings.index')
+            ->with('success', 'Backup berhasil dihapus: ' . $filename);
+    }
+
+    /**
+     * Restore from backup
+     */
+    public function restoreBackup(Request $request)
+    {
+        $request->validate([
+            'backup_file' => 'required|string',
+            'confirm_restore' => 'required|accepted',
+        ]);
+
+        try {
+            $filename = $request->backup_file;
+            $filepath = storage_path('app/backups/' . $filename);
+
+            if (!File::exists($filepath)) {
+                throw new \Exception('File backup tidak ditemukan');
+            }
+
+            $logs = [];
+
+            // Restore database
+            if (str_contains($filename, 'database_') && str_ends_with($filename, '.sql')) {
+                $restoreDb = $this->restoreDatabase($filepath);
+                $logs[] = $restoreDb['message'];
+            }
+
+            // Restore files
+            if (str_contains($filename, 'files_') && str_ends_with($filename, '.zip')) {
+                $restoreFiles = $this->restoreFiles($filepath);
+                $logs[] = $restoreFiles['message'];
+            }
+
+            // Clear caches after restore
+            Artisan::call('cache:clear');
+            Artisan::call('config:clear');
+            Artisan::call('view:clear');
+            $logs[] = 'Cache cleared successfully';
+
+            return redirect()->route('settings.index')
+                ->with('success', 'Restore berhasil!')
+                ->with('backup_logs', $logs);
+
+        } catch (\Exception $e) {
+            Log::error('Restore error: ' . $e->getMessage());
+            return redirect()->route('settings.index')
+                ->with('error', 'Gagal restore backup: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Restore database from SQL file
+     */
+    private function restoreDatabase($filepath)
+    {
+        $dbConnection = config('database.default');
+        $dbConfig = config("database.connections.{$dbConnection}");
+
+        if ($dbConfig['driver'] === 'pgsql') {
+            // PostgreSQL restore
+            $command = sprintf(
+                'psql -h %s -p %s -U %s -d %s < %s',
+                escapeshellarg($dbConfig['host']),
+                escapeshellarg($dbConfig['port']),
+                escapeshellarg($dbConfig['username']),
+                escapeshellarg($dbConfig['database']),
+                escapeshellarg($filepath)
+            );
+
+            putenv("PGPASSWORD=" . $dbConfig['password']);
+            exec($command . ' 2>&1', $output, $returnCode);
+            putenv("PGPASSWORD");
+
+            if ($returnCode !== 0) {
+                throw new \Exception("PostgreSQL restore failed: " . implode("\n", $output));
+            }
+
+        } elseif ($dbConfig['driver'] === 'mysql') {
+            // MySQL restore
+            $command = sprintf(
+                'mysql -h %s -P %s -u %s -p%s %s < %s',
+                escapeshellarg($dbConfig['host']),
+                escapeshellarg($dbConfig['port'] ?? 3306),
+                escapeshellarg($dbConfig['username']),
+                escapeshellarg($dbConfig['password']),
+                escapeshellarg($dbConfig['database']),
+                escapeshellarg($filepath)
+            );
+
+            exec($command . ' 2>&1', $output, $returnCode);
+
+            if ($returnCode !== 0) {
+                throw new \Exception("MySQL restore failed: " . implode("\n", $output));
+            }
+        }
+
+        return [
+            'success' => true,
+            'message' => 'Database restored successfully from: ' . basename($filepath)
+        ];
+    }
+
+    /**
+     * Restore files from ZIP
+     */
+    private function restoreFiles($filepath)
+    {
+        $zip = new \ZipArchive();
+
+        if ($zip->open($filepath) !== true) {
+            throw new \Exception("Cannot open ZIP file");
+        }
+
+        $zip->extractTo(base_path());
+        $zip->close();
+
+        return [
+            'success' => true,
+            'message' => 'Files restored successfully from: ' . basename($filepath)
+        ];
+    }
+
+    /**
+     * Format bytes to human readable
+     */
+    private function formatBytes($bytes, $precision = 2)
+    {
+        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+
+        for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
+            $bytes /= 1024;
+        }
+
+        return round($bytes, $precision) . ' ' . $units[$i];
     }
 }

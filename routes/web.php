@@ -61,6 +61,12 @@ Route::middleware('auth')->group(function () {
     Route::post('settings/check-update', [SettingController::class, 'checkGithubUpdate'])->name('settings.check-update');
     Route::post('settings/run-update', [SettingController::class, 'runGithubUpdate'])->name('settings.run-update');
 
+    // Backup & Restore Routes
+    Route::post('settings/backup/create', [SettingController::class, 'createBackup'])->name('settings.backup.create');
+    Route::get('settings/backup/download/{filename}', [SettingController::class, 'downloadBackup'])->name('settings.backup.download');
+    Route::delete('settings/backup/delete/{filename}', [SettingController::class, 'deleteBackup'])->name('settings.backup.delete');
+    Route::post('settings/backup/restore', [SettingController::class, 'restoreBackup'])->name('settings.backup.restore');
+
     // Hardware Management Routes
     Route::prefix('hardware')->name('hardware.')->group(function () {
         Route::get('/', [HardwareController::class, 'index'])->name('index');
