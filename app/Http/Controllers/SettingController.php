@@ -370,17 +370,31 @@ class SettingController extends Controller
         foreach ($candidates as $path) {
             $realPath = realpath($path);
             if (!$realPath || !is_dir($realPath)) {
+                Log::debug("getRepositoryPath: Path tidak valid: {$path}");
                 continue;
             }
 
-            $process = new Process(['git', 'rev-parse', '--is-inside-work-tree'], $realPath);
-            $process->run();
+            // Check if .git directory exists
+            if (!is_dir($realPath . '/.git')) {
+                Log::debug("getRepositoryPath: .git tidak ditemukan di: {$realPath}");
+                continue;
+            }
 
-            if ($process->isSuccessful() && trim($process->getOutput()) === 'true') {
-                return $realPath;
+            try {
+                $process = new Process(['git', 'rev-parse', '--is-inside-work-tree'], $realPath);
+                $process->run();
+
+                if ($process->isSuccessful() && trim($process->getOutput()) === 'true') {
+                    Log::info("getRepositoryPath: Git repo ditemukan di: {$realPath}");
+                    return $realPath;
+                }
+            } catch (\Exception $e) {
+                Log::debug("getRepositoryPath: Error git command di {$realPath}: " . $e->getMessage());
+                continue;
             }
         }
 
+        Log::error("getRepositoryPath: Tidak menemukan git repository di semua kandidat path");
         return null;
     }
 

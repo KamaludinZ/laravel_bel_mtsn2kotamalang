@@ -507,10 +507,32 @@
                             </div>
                         </div>
 
-                        <div class="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+                        <div class="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700 mb-4">
                             <p class="text-sm text-blue-700 dark:text-blue-300 mb-2">Informasi Update</p>
                             <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
                                 Gunakan tombol di bawah untuk cek update. Jika tersedia, sistem akan meminta konfirmasi sebelum update diproses.
+                            </p>
+                        </div>
+
+                        <!-- Repository Path Configuration (untuk troubleshooting) -->
+                        <div class="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
+                            <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Konfigurasi Repository (Opsional)</h4>
+                            <p class="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                                Jika mendapat error "Repository git tidak ditemukan", isi path lengkap ke direktori aplikasi di bawah ini:
+                            </p>
+                            <form action="{{ route('settings.update') }}" method="POST" class="flex gap-2">
+                                @csrf
+                                <input type="text" name="update_repo_path"
+                                    value="{{ old('update_repo_path', \App\Models\Setting::get('update_repo_path', base_path())) }}"
+                                    placeholder="Contoh: /var/www/html/laravel_bel atau C:\laravel_bel_mtsn2kotamalang"
+                                    class="flex-1 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 dark:bg-gray-800 dark:border-gray-600 dark:text-white">
+                                <button type="submit"
+                                    class="px-4 py-2 bg-gray-600 text-white text-xs font-semibold rounded-lg hover:bg-gray-700 transition">
+                                    Simpan Path
+                                </button>
+                            </form>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                                Path saat ini: <code class="bg-gray-200 dark:bg-gray-800 px-2 py-1 rounded">{{ base_path() }}</code>
                             </p>
                         </div>
 
