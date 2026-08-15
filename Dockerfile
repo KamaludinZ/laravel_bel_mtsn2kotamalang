@@ -46,15 +46,20 @@ ENV COMPOSER_MEMORY_LIMIT=-1
 WORKDIR /var/www/html
 
 # Copy composer files first for better caching
-COPY composer.json composer.lock ./
+COPY composer.json composer.lock* ./
 
 # Install PHP dependencies
-RUN composer install \
-    --no-dev \
-    --no-scripts \
-    --no-autoloader \
-    --prefer-dist \
-    --no-interaction
+# If composer.lock doesn't exist, create it first
+RUN if [ ! -f composer.lock ]; then \
+        echo "composer.lock not found, running composer update to generate it..."; \
+        composer update --no-scripts --no-interaction --ignore-platform-reqs; \
+    fi && \
+    composer install \
+        --no-dev \
+        --prefer-dist \
+        --no-interaction \
+        --ignore-platform-reqs \
+        --optimize-autoloader
 
 # Copy package.json for NPM dependencies
 COPY package*.json ./
