@@ -1,0 +1,71 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# Node
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Composer
+/vendor
+
+# Laravel
+.env
+.env.*
+!.env.example
+/storage/*.key
+/storage/app/*
+!/storage/app/.gitignore
+!/storage/app/public
+/storage/framework/cache/*
+!/storage/framework/cache/.gitignore
+/storage/framework/sessions/*
+!/storage/framework/sessions/.gitignore
+/storage/framework/views/*
+!/storage/framework/views/.gitignore
+/storage/logs/*
+!/storage/logs/.gitignore
+/bootstrap/cache/*
+!/bootstrap/cache/.gitignore
+
+# Tests
+/tests
+/phpunit.xml
+/.phpunit.result.cache
+
+# Documentation
+*.md
+!README.md
+/docs
+
+# Docker
+docker-compose.override.yml
+Dockerfile.dev
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+/public/hot
+/public/storage
+/public/build
+
+# Backup files
+*.backup
+*.bak
+*.tmp
+/storage/app/backups/*
+
+# Temporary files
+*.log
+*.cache
