@@ -45,36 +45,24 @@ ENV COMPOSER_MEMORY_LIMIT=-1
 # Set working directory
 WORKDIR /var/www/html
 
-# Copy composer files first for better caching
-COPY composer.json composer.lock* ./
-
-# Install PHP dependencies
-# If composer.lock doesn't exist, create it first
-RUN if [ ! -f composer.lock ]; then \
-        echo "composer.lock not found, running composer update to generate it..."; \
-        composer update --no-scripts --no-interaction --ignore-platform-reqs; \
-    fi && \
-    composer install \
-        --no-dev \
-        --prefer-dist \
-        --no-interaction \
-        --ignore-platform-reqs \
-        --optimize-autoloader
-
-# Copy package.json for NPM dependencies
-COPY package*.json ./
-
-# Install NPM dependencies
-RUN npm ci
-
 # Copy application code
 COPY . .
 
-# Build frontend assets (after copying source files)
-RUN npm run build
+# Install PHP dependencies
+# Using --no-scripts to avoid premature script execution
+RUN composer install \
+    --no-dev \
+    --prefer-dist \
+    --no-interaction \
+    --ignore-platform-reqs \
+    --no-scripts \
+    --optimize-autoloader
 
-# Generate optimized autoloader
-RUN composer dump-autoload --no-dev --optimize
+# Install NPM dependencies and build assets
+RUN npm ci && npm run build
+
+# Run post-install scripts
+RUN composer run-script post-autoload-dump
 
 # Set permissions
 RUN chown -R www-data:www-data /var/www/html \
