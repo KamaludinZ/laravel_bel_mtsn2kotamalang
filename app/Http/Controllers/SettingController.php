@@ -820,37 +820,52 @@ class SettingController extends Controller
             $filepath = storage_path('app/backups/' . $filename);
 
             if (!File::exists($filepath)) {
-                throw new \Exception('File backup tidak ditemukan');
+                throw new \Exception('File backup tidak ditemukan: ' . $filename);
             }
 
             $logs = [];
+            $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
 
-            // Restore database
-            if (str_contains($filename, 'database_') && str_ends_with($filename, '.sql')) {
+            Log::info("Starting restore for file: {$filename} (extension: {$extension})");
+
+            // Restore database if .sql file
+            if ($extension === 'sql') {
+                Log::info("Restoring database from SQL file: {$filename}");
                 $restoreDb = $this->restoreDatabase($filepath);
                 $logs[] = $restoreDb['message'];
+                Log::info("Database restore completed successfully");
             }
 
-            // Restore files
-            if (str_contains($filename, 'files_') && str_ends_with($filename, '.zip')) {
+            // Restore files if .zip file
+            if ($extension === 'zip') {
+                Log::info("Restoring files from ZIP: {$filename}");
                 $restoreFiles = $this->restoreFiles($filepath);
                 $logs[] = $restoreFiles['message'];
+                Log::info("Files restore completed successfully");
+            }
+
+            // If no restore was performed
+            if (empty($logs)) {
+                throw new \Exception("Format file tidak didukung. Hanya file .sql dan .zip yang dapat di-restore. File Anda: .{$extension}");
             }
 
             // Clear caches after restore
             Artisan::call('cache:clear');
             Artisan::call('config:clear');
             Artisan::call('view:clear');
-            $logs[] = 'Cache cleared successfully';
+            $logs[] = '✅ Cache berhasil dibersihkan';
+
+            Log::info("Restore completed successfully for: {$filename}");
 
             return redirect()->route('settings.index')
-                ->with('success', 'Restore berhasil!')
+                ->with('success', '✅ Restore berhasil! Database/Files telah dipulihkan dari backup.')
                 ->with('backup_logs', $logs);
 
         } catch (\Exception $e) {
             Log::error('Restore error: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
             return redirect()->route('settings.index')
-                ->with('error', 'Gagal restore backup: ' . $e->getMessage());
+                ->with('error', '❌ Gagal restore backup: ' . $e->getMessage());
         }
     }
 
@@ -861,6 +876,8 @@ class SettingController extends Controller
     {
         $dbConnection = config('database.default');
         $dbConfig = config("database.connections.{$dbConnection}");
+
+        Log::info("Database restore config - Driver: {$dbConfig['driver']}, Host: {$dbConfig['host']}, Database: {$dbConfig['database']}");
 
         if ($dbConfig['driver'] === 'pgsql') {
             // PostgreSQL restore
@@ -873,12 +890,19 @@ class SettingController extends Controller
                 escapeshellarg($filepath)
             );
 
+            Log::info("Executing PostgreSQL restore command");
+
             putenv("PGPASSWORD=" . $dbConfig['password']);
             exec($command . ' 2>&1', $output, $returnCode);
             putenv("PGPASSWORD");
 
+            Log::info("PostgreSQL restore output: " . implode("\n", $output));
+            Log::info("PostgreSQL restore return code: " . $returnCode);
+
             if ($returnCode !== 0) {
-                throw new \Exception("PostgreSQL restore failed: " . implode("\n", $output));
+                $errorMsg = "PostgreSQL restore failed (code: {$returnCode}): " . implode("\n", $output);
+                Log::error($errorMsg);
+                throw new \Exception($errorMsg);
             }
 
         } elseif ($dbConfig['driver'] === 'mysql') {
@@ -893,16 +917,28 @@ class SettingController extends Controller
                 escapeshellarg($filepath)
             );
 
+            Log::info("Executing MySQL restore command");
+
             exec($command . ' 2>&1', $output, $returnCode);
 
+            Log::info("MySQL restore output: " . implode("\n", $output));
+            Log::info("MySQL restore return code: " . $returnCode);
+
             if ($returnCode !== 0) {
-                throw new \Exception("MySQL restore failed: " . implode("\n", $output));
+                $errorMsg = "MySQL restore failed (code: {$returnCode}): " . implode("\n", $output);
+                Log::error($errorMsg);
+                throw new \Exception($errorMsg);
             }
+        } else {
+            throw new \Exception("Database driver {$dbConfig['driver']} tidak didukung untuk restore");
         }
+
+        $successMsg = '✅ Database berhasil di-restore dari: ' . basename($filepath);
+        Log::info($successMsg);
 
         return [
             'success' => true,
-            'message' => 'Database restored successfully from: ' . basename($filepath)
+            'message' => $successMsg
         ];
     }
 
@@ -924,6 +960,66 @@ class SettingController extends Controller
             'success' => true,
             'message' => 'Files restored successfully from: ' . basename($filepath)
         ];
+    }
+
+    /**
+     * Upload backup file for restore
+     */
+    public function uploadBackup(Request $request)
+    {
+        try {
+            // Custom validation for backup files
+            $file = $request->file('backup_file');
+
+            if (!$file) {
+                throw new \Exception('File tidak ditemukan. Pastikan Anda memilih file untuk diupload.');
+            }
+
+            // Check file size (100MB max)
+            if ($file->getSize() > 102400 * 1024) { // 100MB in bytes
+                throw new \Exception('Ukuran file terlalu besar. Maksimal 100MB.');
+            }
+
+            // Get file extension
+            $extension = strtolower($file->getClientOriginalExtension());
+
+            // Validate extension
+            if (!in_array($extension, ['sql', 'zip'])) {
+                throw new \Exception('Format file tidak valid. Hanya file .sql dan .zip yang diperbolehkan.');
+            }
+
+            $filename = $file->getClientOriginalName();
+
+            // Ensure backup directory exists
+            $backupPath = storage_path('app/backups');
+            if (!File::exists($backupPath)) {
+                File::makeDirectory($backupPath, 0755, true);
+            }
+
+            // Handle duplicate filenames
+            if (File::exists("{$backupPath}/{$filename}")) {
+                $filename = date('YmdHis') . '_' . $filename;
+            }
+
+            // Move uploaded file to backups directory
+            $file->move($backupPath, $filename);
+
+            $size = $this->formatBytes(File::size("{$backupPath}/{$filename}"));
+
+            Log::info('Backup file uploaded: ' . $filename . ' by user: ' . auth()->user()->name);
+
+            return redirect()->route('settings.index')
+                ->with('success', "✅ File backup berhasil diupload: {$filename} ({$size}). File siap untuk di-restore.");
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return redirect()->route('settings.index')
+                ->withErrors($e->validator)
+                ->withInput();
+        } catch (\Exception $e) {
+            Log::error('Upload backup error: ' . $e->getMessage());
+            return redirect()->route('settings.index')
+                ->with('error', '❌ Gagal upload backup: ' . $e->getMessage());
+        }
     }
 
 }

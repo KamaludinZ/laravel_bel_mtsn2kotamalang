@@ -9,13 +9,24 @@
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             @if (session('success'))
                 <div class="mb-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative dark:bg-green-800 dark:border-green-600 dark:text-green-200" role="alert">
-                    <span class="block sm:inline">{{ session('success') }}</span>
+                    <span class="block sm:inline font-semibold">{{ session('success') }}</span>
+
+                    @if (session('backup_logs'))
+                        <div class="mt-3 pt-3 border-t border-green-300 dark:border-green-600">
+                            <p class="text-xs font-semibold mb-2">Detail Proses:</p>
+                            <ul class="text-xs space-y-1 list-disc list-inside">
+                                @foreach (session('backup_logs') as $log)
+                                    <li>{{ $log }}</li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
                 </div>
             @endif
 
             @if (session('error'))
                 <div class="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative dark:bg-red-800 dark:border-red-600 dark:text-red-200" role="alert">
-                    <span class="block sm:inline">{{ session('error') }}</span>
+                    <span class="block sm:inline font-semibold">{{ session('error') }}</span>
                 </div>
             @endif
 
@@ -528,6 +539,45 @@
 
                         <hr class="my-6 border-gray-200 dark:border-gray-700">
 
+                        <!-- Upload Backup Section -->
+                        <div class="mb-8">
+                            <h4 class="text-md font-semibold mb-3 text-gray-900 dark:text-gray-100">Upload File Backup untuk Restore</h4>
+                            <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                                Upload file backup (.sql atau .zip) dari komputer Anda untuk di-restore ke aplikasi ini.
+                            </p>
+
+                            <form action="{{ route('settings.backup.upload') }}" method="POST" enctype="multipart/form-data" class="space-y-4">
+                                @csrf
+
+                                <div>
+                                    <label class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300">
+                                        File Backup <span class="text-red-500">*</span>
+                                    </label>
+                                    <input type="file" name="backup_file" accept=".sql,.zip" required
+                                        class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 dark:text-gray-400 focus:outline-none dark:bg-gray-700 dark:border-gray-600">
+                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                        Hanya file .sql (database) atau .zip (files). Max 100MB.
+                                    </p>
+                                </div>
+
+                                <div class="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-700">
+                                    <p class="text-xs text-yellow-700 dark:text-yellow-300">
+                                        ⚠️ File yang diupload akan langsung tersedia untuk di-restore. Pastikan file backup valid dan berasal dari aplikasi yang sama.
+                                    </p>
+                                </div>
+
+                                <button type="submit"
+                                    class="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-700 transition">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                    </svg>
+                                    Upload File Backup
+                                </button>
+                            </form>
+                        </div>
+
+                        <hr class="my-6 border-gray-200 dark:border-gray-700">
+
                         <!-- Backups List -->
                         <div>
                             <h4 class="text-md font-semibold mb-3 text-gray-900 dark:text-gray-100">
@@ -792,5 +842,20 @@
             activeButton.classList.add('active', 'border-blue-500', 'text-blue-600', 'dark:text-blue-400');
             activeButton.classList.remove('border-transparent', 'text-gray-500', 'dark:text-gray-400');
         }
+
+        // Auto-switch to backup tab if there's a backup-related message
+        document.addEventListener('DOMContentLoaded', function() {
+            const successMessage = document.querySelector('.bg-green-100');
+            const errorMessage = document.querySelector('.bg-red-100');
+
+            if (successMessage && successMessage.textContent.toLowerCase().includes('backup')) {
+                switchTab('backup');
+                // Scroll to top to show the message
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } else if (errorMessage && errorMessage.textContent.toLowerCase().includes('backup')) {
+                switchTab('backup');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        });
     </script>
 </x-app-layout>

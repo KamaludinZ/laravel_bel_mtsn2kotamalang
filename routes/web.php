@@ -66,6 +66,7 @@ Route::middleware('auth')->group(function () {
     Route::get('settings/backup/download/{filename}', [SettingController::class, 'downloadBackup'])->name('settings.backup.download');
     Route::delete('settings/backup/delete/{filename}', [SettingController::class, 'deleteBackup'])->name('settings.backup.delete');
     Route::post('settings/backup/restore', [SettingController::class, 'restoreBackup'])->name('settings.backup.restore');
+    Route::post('settings/backup/upload', [SettingController::class, 'uploadBackup'])->name('settings.backup.upload');
 
     // Hardware Management Routes
     Route::prefix('hardware')->name('hardware.')->group(function () {
