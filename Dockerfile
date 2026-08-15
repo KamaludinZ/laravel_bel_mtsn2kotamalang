@@ -1,5 +1,5 @@
 # Multi-stage build for production Laravel application
-FROM php:8.4-fpm-alpine AS base
+FROM php:8.3-fpm-alpine AS base
 
 # Install system dependencies
 RUN apk add --no-cache \
@@ -37,6 +37,11 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
+# Set composer configurations
+ENV COMPOSER_ALLOW_SUPERUSER=1
+ENV COMPOSER_NO_INTERACTION=1
+ENV COMPOSER_MEMORY_LIMIT=-1
+
 # Set working directory
 WORKDIR /var/www/html
 
@@ -44,16 +49,24 @@ WORKDIR /var/www/html
 COPY composer.json composer.lock ./
 
 # Install PHP dependencies
-RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
+RUN composer install \
+    --no-dev \
+    --no-scripts \
+    --no-autoloader \
+    --prefer-dist \
+    --no-interaction
 
 # Copy package.json for NPM dependencies
 COPY package*.json ./
 
-# Install NPM dependencies and build assets
-RUN npm ci && npm run build
+# Install NPM dependencies
+RUN npm ci
 
 # Copy application code
 COPY . .
+
+# Build frontend assets (after copying source files)
+RUN npm run build
 
 # Generate optimized autoloader
 RUN composer dump-autoload --no-dev --optimize
