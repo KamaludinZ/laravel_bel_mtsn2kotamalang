@@ -33,6 +33,14 @@
                     <x-nav-link :href="route('bell-types.index')" :active="request()->routeIs('bell-types.*')">
                         {{ __('Kelola Jenis Bel') }}
                     </x-nav-link>
+                    @php
+                        $hardwareEnabled = \App\Models\Setting::get('hardware_integration_enabled', 'false') === 'true';
+                    @endphp
+                    @if($hardwareEnabled)
+                        <x-nav-link :href="route('hardware.index')" :active="request()->routeIs('hardware.*')">
+                            {{ __('Hardware Control') }}
+                        </x-nav-link>
+                    @endif
                     <x-nav-link :href="route('settings.index')" :active="request()->routeIs('settings.*')">
                         {{ __('Pengaturan Sistem') }}
                     </x-nav-link>
@@ -100,6 +108,14 @@
             <x-responsive-nav-link :href="route('bell-types.index')" :active="request()->routeIs('bell-types.*')">
                 {{ __('Kelola Jenis Bel') }}
             </x-responsive-nav-link>
+            @php
+                $hardwareEnabled = \App\Models\Setting::get('hardware_integration_enabled', 'false') === 'true';
+            @endphp
+            @if($hardwareEnabled)
+                <x-responsive-nav-link :href="route('hardware.index')" :active="request()->routeIs('hardware.*')">
+                    {{ __('Hardware Control') }}
+                </x-responsive-nav-link>
+            @endif
             <x-responsive-nav-link :href="route('settings.index')" :active="request()->routeIs('settings.*')">
                 {{ __('Pengaturan Sistem') }}
             </x-responsive-nav-link>

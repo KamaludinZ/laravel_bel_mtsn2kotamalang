@@ -4,6 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\BellSchedule;
 use App\Models\BellType;
+use App\Models\HardwareCommandQueue;
+use App\Models\Setting;
+use App\Models\SpeakerZone;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -116,5 +119,91 @@ class PublicController extends Controller
             'date' => Carbon::now()->format('Y-m-d'),
             'datetime' => Carbon::now()->toIso8601String(),
         ]);
+    }
+
+    /**
+     * Queue hardware trigger from frontend
+     */
+    public function queueHardwareTrigger(Request $request)
+    {
+        $validated = $request->validate([
+            'schedule_id' => 'required|uuid|exists:bell_schedules,id',
+            'audio_duration' => 'nullable|integer',
+        ]);
+
+        $schedule = BellSchedule::with('audioLibrary')->findOrFail($validated['schedule_id']);
+        $this->triggerHardware($schedule, $validated['audio_duration'] ?? null);
+
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Queue hardware trigger command
+     */
+    private function triggerHardware($schedule, $duration = null)
+    {
+        try {
+            // ===== CHECK IF HARDWARE INTEGRATION IS ENABLED =====
+            $hardwareEnabled = Setting::get('hardware_integration_enabled', 'false') === 'true';
+
+            if (!$hardwareEnabled) {
+                \Log::info('Hardware integration disabled - skipping hardware trigger for schedule: ' . $schedule->id);
+                return; // Skip hardware trigger, audio will only play in browser
+            }
+
+            // Get all active zones from all active rooms (including PARENT channels)
+            $rooms = \App\Models\Room::with('speakerZone')
+                ->active()
+                ->whereNotNull('speaker_zone_id')
+                ->get();
+
+            $zones = $rooms->pluck('speakerZone.modbus_channel')->unique()->values()->toArray();
+
+            if (empty($zones)) {
+                \Log::warning('No active rooms with speaker zones found for hardware trigger');
+                return;
+            }
+
+            // Calculate duration from audio or use default
+            $audioDuration = $schedule->audioLibrary->duration ?? 180; // 3 minutes default
+            $triggerDuration = $duration ?? $audioDuration;
+
+            // STEP 1: Activate ON ALL - Turn on all speakers (PARENT + all groups)
+            HardwareCommandQueue::create([
+                'command_type' => 'trigger_bell',
+                'payload' => [
+                    'zones' => $zones,
+                    'duration_seconds' => (int) $triggerDuration,
+                    'schedule_id' => $schedule->id,
+                    'audio_id' => $schedule->audioLibrary->id,
+                    'audio_title' => $schedule->audioLibrary->title,
+                    'trigger_type' => 'SCHEDULE_ON_ALL',
+                    'room_count' => $rooms->count(),
+                ],
+                'status' => 'pending',
+                'scheduled_at' => now(),
+                'expires_at' => now()->addMinutes(10),
+            ]);
+
+            // STEP 2: Schedule OFF ALL command after audio duration + 2 seconds buffer
+            $offAllDelay = (int) $triggerDuration + 2;
+            HardwareCommandQueue::create([
+                'command_type' => 'stop_all',
+                'payload' => [
+                    'zones' => $zones,
+                    'action' => 'stop',
+                    'trigger_type' => 'SCHEDULE_OFF_ALL',
+                    'schedule_id' => $schedule->id,
+                ],
+                'status' => 'pending',
+                'scheduled_at' => now()->addSeconds($offAllDelay),
+                'expires_at' => now()->addMinutes(15),
+            ]);
+
+            \Log::info("Hardware trigger queued for schedule {$schedule->id}: ON ALL ({$triggerDuration}s) -> OFF ALL (after {$offAllDelay}s), zones: " . implode(',', $zones));
+
+        } catch (\Exception $e) {
+            \Log::error('Error queueing hardware trigger: ' . $e->getMessage());
+        }
     }
 }

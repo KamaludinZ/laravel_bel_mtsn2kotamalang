@@ -28,7 +28,14 @@
       "Bash(php -r:*)",
       "Bash(php check_durations.php:*)",
       "Bash(del check_durations.php)",
-      "Bash(tar:*)"
+      "Bash(tar:*)",
+      "Bash(php -l:*)",
+      "Bash(mkdir:*)",
+      "Bash(powershell -Command \"Get-Content ''C:\\laravel_bel_mtsn2kotamalang\\resources\\views\\hardware\\index.blade.php'' | Measure-Object -Line\")",
+      "Bash(powershell -Command \"Get-Content ''C:\\laravel_bel_mtsn2kotamalang\\resources\\views\\hardware\\index.blade.php'' | Select-Object -Last 20\")",
+      "Bash(php check_rooms.php:*)",
+      "Bash(del check_rooms.php)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

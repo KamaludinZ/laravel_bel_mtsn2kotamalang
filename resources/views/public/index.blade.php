@@ -491,6 +491,10 @@
                 },
 
                 playAudio(schedule) {
+                    // ===== TRIGGER HARDWARE FIRST =====
+                    this.queueHardwareTrigger(schedule);
+
+                    // Then play browser audio as fallback
                     this.currentPlayingSchedule = schedule;
                     this.currentSchedulePlayingId = schedule.id;
                     this.nowPlayingTitle = schedule.audio.title;
@@ -706,6 +710,36 @@
                     }
 
                     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                },
+
+                // Queue hardware trigger via API
+                async queueHardwareTrigger(schedule) {
+                    if (!schedule || !schedule.audio) return;
+
+                    try {
+                        const csrfToken = document.querySelector('meta[name="csrf-token"]');
+
+                        const response = await fetch('/api/queue-hardware-trigger', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': csrfToken ? csrfToken.content : ''
+                            },
+                            body: JSON.stringify({
+                                schedule_id: schedule.id,
+                                audio_duration: schedule.audio.duration || 180
+                            })
+                        });
+
+                        if (response.ok) {
+                            console.log('✓ Hardware trigger queued successfully');
+                        } else {
+                            console.warn('✗ Failed to queue hardware trigger:', response.status);
+                        }
+                    } catch (error) {
+                        console.error('✗ Error queueing hardware trigger:', error);
+                        // Don't block browser audio playback
+                    }
                 }
             }
         }

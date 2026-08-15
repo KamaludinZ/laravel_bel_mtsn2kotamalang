@@ -4,6 +4,7 @@ use App\Http\Controllers\AudioLibraryController;
 use App\Http\Controllers\BellScheduleController;
 use App\Http\Controllers\BellTypeController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\HardwareController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicController;
 use App\Http\Controllers\SettingController;
@@ -14,6 +15,9 @@ Route::get('/', [PublicController::class, 'index'])->name('public.index');
 Route::post('/activate-bell-type', [PublicController::class, 'activateBellType'])->name('public.activate-bell-type');
 Route::get('/api/today-schedule', [PublicController::class, 'getTodaySchedule'])->name('api.today-schedule');
 Route::get('/api/current-time', [PublicController::class, 'getCurrentTime'])->name('api.current-time');
+
+// API untuk queue hardware trigger (dipanggil dari JavaScript)
+Route::post('/api/queue-hardware-trigger', [PublicController::class, 'queueHardwareTrigger'])->name('api.queue-hardware-trigger');
 
 Route::get('/dashboard', [DashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
 
@@ -51,10 +55,32 @@ Route::middleware('auth')->group(function () {
     // Settings Management
     Route::get('settings', [SettingController::class, 'index'])->name('settings.index');
     Route::post('settings', [SettingController::class, 'update'])->name('settings.update');
+    Route::post('settings/toggle-hardware', [SettingController::class, 'toggleHardware'])->name('settings.toggle-hardware');
     Route::post('settings/clear-cache', [SettingController::class, 'clearCache'])->name('settings.clear-cache');
     Route::post('settings/clear-logs', [SettingController::class, 'clearLogs'])->name('settings.clear-logs');
     Route::post('settings/check-update', [SettingController::class, 'checkGithubUpdate'])->name('settings.check-update');
     Route::post('settings/run-update', [SettingController::class, 'runGithubUpdate'])->name('settings.run-update');
+
+    // Hardware Management Routes
+    Route::prefix('hardware')->name('hardware.')->group(function () {
+        Route::get('/', [HardwareController::class, 'index'])->name('index');
+        Route::post('/test-speaker', [HardwareController::class, 'testSpeaker'])->name('test-speaker');
+        Route::post('/test-all-zones', [HardwareController::class, 'testAllZones'])->name('test-all-zones');
+        Route::post('/off-all', [HardwareController::class, 'offAll'])->name('off-all');
+        Route::post('/test-room', [HardwareController::class, 'testRoom'])->name('test-room');
+        Route::post('/test-group', [HardwareController::class, 'testGroup'])->name('test-group');
+        Route::post('/test-type', [HardwareController::class, 'testType'])->name('test-type');
+        Route::post('/update-room-name', [HardwareController::class, 'updateRoomName'])->name('update-room-name');
+        Route::post('/bulk-update-room-names', [HardwareController::class, 'bulkUpdateRoomNames'])->name('bulk-update-room-names');
+        Route::post('/bulk-update-rooms', [HardwareController::class, 'bulkUpdateRooms'])->name('bulk-update-rooms');
+        Route::post('/update-group-labels', [HardwareController::class, 'updateGroupLabels'])->name('update-group-labels');
+        Route::post('/update-parent-channel', [HardwareController::class, 'updateParentChannel'])->name('update-parent-channel');
+        Route::post('/update-config', [HardwareController::class, 'updateConfig'])->name('update-config');
+        Route::get('/logs', [HardwareController::class, 'logs'])->name('logs');
+        Route::post('/logs/clear', [HardwareController::class, 'clearOldLogs'])->name('logs.clear');
+        Route::get('/zones', [HardwareController::class, 'zones'])->name('zones');
+        Route::patch('/zones/{zone}', [HardwareController::class, 'updateZone'])->name('zones.update');
+    });
 });
 
 require __DIR__.'/auth.php';

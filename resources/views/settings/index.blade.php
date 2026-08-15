@@ -98,6 +98,88 @@
                         </form>
                     </div>
                 </div>
+
+                <!-- Hardware Integration Toggle -->
+                <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg mt-6">
+                    <div class="p-6 text-gray-900 dark:text-gray-100">
+                        <h3 class="text-lg font-semibold mb-4">Integrasi Hardware Speaker</h3>
+
+                        <form action="{{ route('settings.toggle-hardware') }}" method="POST">
+                            @csrf
+
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <div class="flex items-center mb-3">
+                                        <label for="hardware_enabled" class="text-sm font-medium text-gray-900 dark:text-gray-300 mr-3">
+                                            Aktifkan Kontrol Hardware Speaker Fisik
+                                        </label>
+
+                                        <!-- Toggle Switch -->
+                                        <label class="relative inline-flex items-center cursor-pointer">
+                                            <input type="checkbox"
+                                                   name="hardware_enabled"
+                                                   id="hardware_enabled"
+                                                   value="1"
+                                                   class="sr-only peer"
+                                                   {{ $hardwareEnabled ? 'checked' : '' }}
+                                                   onchange="this.form.submit()">
+                                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                                        </label>
+                                    </div>
+
+                                    <!-- Status Indicator -->
+                                    <div class="mb-4">
+                                        @if($hardwareEnabled)
+                                            <div class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100">
+                                                <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                                                </svg>
+                                                Aktif - Speaker fisik akan bunyi
+                                            </div>
+                                        @else
+                                            <div class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300">
+                                                <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                                                </svg>
+                                                Nonaktif - Hanya browser audio
+                                            </div>
+                                        @endif
+                                    </div>
+
+                                    <!-- Description -->
+                                    <div class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                                        <p class="mb-2"><strong>Jika Diaktifkan:</strong></p>
+                                        <ul class="list-disc list-inside ml-4 space-y-1">
+                                            <li>Bel otomatis akan mentrigger speaker fisik melalui Modbus RS485</li>
+                                            <li>Audio juga tetap diputar di browser sebagai backup</li>
+                                            <li>Menu Hardware Control dapat diakses untuk konfigurasi</li>
+                                        </ul>
+
+                                        <p class="mt-3 mb-2"><strong>Jika Dinonaktifkan:</strong></p>
+                                        <ul class="list-disc list-inside ml-4 space-y-1">
+                                            <li>Bel hanya akan diputar melalui browser saja</li>
+                                            <li>Tidak ada trigger ke hardware speaker fisik</li>
+                                            <li>Menu Hardware Control tidak akan muncul</li>
+                                        </ul>
+                                    </div>
+
+                                    <!-- Link to Hardware Dashboard (only when enabled) -->
+                                    @if($hardwareEnabled)
+                                        <div class="pt-4 border-t border-gray-200 dark:border-gray-700">
+                                            <a href="{{ route('hardware.index') }}"
+                                               class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700 transition">
+                                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
+                                                </svg>
+                                                Buka Dashboard Hardware
+                                            </a>
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             </div>
 
             <!-- Tab Content: Monitoring -->

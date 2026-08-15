@@ -24,11 +24,12 @@ class SettingController extends Controller
     {
         $appName = Setting::get('app_name', config('app.name'));
         $appLogo = Setting::get('app_logo');
+        $hardwareEnabled = Setting::get('hardware_integration_enabled', 'false') === 'true';
 
         // Get monitoring data
         $monitoring = $this->getMonitoringData();
 
-        return view('settings.index', compact('appName', 'appLogo', 'monitoring'));
+        return view('settings.index', compact('appName', 'appLogo', 'monitoring', 'hardwareEnabled'));
     }
 
     /**
@@ -543,5 +544,24 @@ class SettingController extends Controller
 
         return redirect()->route('settings.index')
             ->with('success', 'Pengaturan berhasil diupdate');
+    }
+
+    /**
+     * Toggle hardware integration
+     */
+    public function toggleHardware(Request $request)
+    {
+        $enabled = $request->has('hardware_enabled') && $request->hardware_enabled == '1';
+
+        Setting::set('hardware_integration_enabled', $enabled ? 'true' : 'false');
+
+        $message = $enabled
+            ? 'Hardware integration diaktifkan. Speaker fisik akan ikut bunyi saat bel otomatis.'
+            : 'Hardware integration dinonaktifkan. Audio hanya akan diputar di browser.';
+
+        Log::info('Hardware integration ' . ($enabled ? 'enabled' : 'disabled') . ' by user: ' . auth()->user()->name);
+
+        return redirect()->route('settings.index')
+            ->with('success', $message);
     }
 }
