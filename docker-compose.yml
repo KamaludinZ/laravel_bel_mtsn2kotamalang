@@ -96,8 +96,9 @@ services:
       # Logging
       - LOG_CHANNEL=stack
       - LOG_LEVEL=${LOG_LEVEL:-error}
-    ports:
-      - "${PORT:-80}:80"
+    # Port mapping removed - Coolify handles this via reverse proxy
+    expose:
+      - "80"
     networks:
       - app-network
     healthcheck:
