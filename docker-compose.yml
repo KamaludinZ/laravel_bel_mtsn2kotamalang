@@ -13,7 +13,7 @@ services:
     volumes:
       - ./storage:/var/www/html/storage
       - ./bootstrap/cache:/var/www/html/bootstrap/cache
-      - ./.env:/var/www/html/.env
+      # .env is handled by Coolify via environment variables, not volume mount
     environment:
       - APP_ENV=${APP_ENV:-production}
       - APP_DEBUG=${APP_DEBUG:-false}
@@ -49,7 +49,7 @@ services:
     restart: unless-stopped
     environment:
       - POSTGRES_DB=${DB_DATABASE:-laravel_bel}
-      - POSTGRES_USER=${DB_USERNAME:-postgres}
+      - POSTGRES_USER=${DB_USERNAME:-laravel}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - PGDATA=/var/lib/postgresql/data/pgdata
     volumes:
@@ -60,7 +60,7 @@ services:
     networks:
       - laravel-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-laravel} -d ${DB_DATABASE:-laravel_bel}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -103,7 +103,7 @@ services:
     command: php artisan queue:work --verbose --tries=3 --timeout=90
     volumes:
       - ./storage:/var/www/html/storage
-      - ./.env:/var/www/html/.env
+      # .env is handled by Coolify via environment variables
     environment:
       - APP_ENV=${APP_ENV:-production}
       - APP_DEBUG=${APP_DEBUG:-false}
@@ -140,7 +140,7 @@ services:
     command: sh -c "while true; do php artisan schedule:run --verbose --no-interaction & sleep 60; done"
     volumes:
       - ./storage:/var/www/html/storage
-      - ./.env:/var/www/html/.env
+      # .env is handled by Coolify via environment variables
     environment:
       - APP_ENV=${APP_ENV:-production}
       - APP_DEBUG=${APP_DEBUG:-false}
