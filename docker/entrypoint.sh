@@ -11,13 +11,18 @@ until pg_isready -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USERNAME}; do
 done
 echo "✅ PostgreSQL is ready!"
 
-# Wait for Redis to be ready
-echo "⏳ Waiting for Redis..."
-until redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT} ping > /dev/null 2>&1; do
-    echo "Redis is unavailable - sleeping"
-    sleep 2
-done
-echo "✅ Redis is ready!"
+# Wait for Redis to be ready (optional - skip if Redis not configured)
+if [ ! -z "${REDIS_HOST}" ] && [ "${REDIS_HOST}" != "null" ]; then
+    echo "⏳ Waiting for Redis at ${REDIS_HOST}:${REDIS_PORT}..."
+    # Use nc (netcat) instead of redis-cli (not installed in container)
+    until nc -z ${REDIS_HOST} ${REDIS_PORT:-6379}; do
+        echo "Redis is unavailable - sleeping"
+        sleep 2
+    done
+    echo "✅ Redis is ready!"
+else
+    echo "ℹ️  Redis not configured, skipping..."
+fi
 
 # Set proper permissions
 echo "🔧 Setting permissions..."

@@ -13,6 +13,7 @@ RUN apk add --no-cache \
     supervisor \
     nodejs \
     npm \
+    netcat-openbsd \
     libpng-dev \
     libjpeg-turbo-dev \
     freetype-dev \
