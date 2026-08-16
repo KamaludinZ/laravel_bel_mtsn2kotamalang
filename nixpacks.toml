@@ -1,0 +1,40 @@
+# Nixpacks Configuration for Laravel Bel MTsN 2 Kota Malang
+# https://nixpacks.com/docs/configuration/file
+
+[phases.setup]
+nixPkgs = ["php83", "php83Packages.composer", "nodejs_20", "postgresql"]
+
+[phases.install]
+cmds = [
+    "composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist",
+    "npm ci"
+]
+
+[phases.build]
+cmds = [
+    "npm run build",
+    "php artisan config:clear",
+    "php artisan route:clear",
+    "php artisan view:clear"
+]
+
+[start]
+cmd = "php artisan serve --host=0.0.0.0 --port=8080"
+
+[variables]
+# PHP Configuration
+PHP_VERSION = "8.3"
+NODE_VERSION = "20"
+
+# Laravel Optimization
+APP_ENV = "production"
+APP_DEBUG = "false"
+
+# Cache & Session (use file driver if Redis not available)
+CACHE_DRIVER = "file"
+SESSION_DRIVER = "file"
+QUEUE_CONNECTION = "database"
+
+# Logging
+LOG_CHANNEL = "stack"
+LOG_LEVEL = "error"
