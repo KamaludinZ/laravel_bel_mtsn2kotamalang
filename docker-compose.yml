@@ -8,7 +8,7 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:16-alpine
-    container_name: laravel-bel-postgres
+    # Remove container_name to use default (project_postgres_1)
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_DATABASE:-laravel_bel}
@@ -29,7 +29,7 @@ services:
   # Redis Cache & Session Store
   redis:
     image: redis:7-alpine
-    container_name: laravel-bel-redis
+    # Remove container_name to use default (project_redis_1)
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
@@ -51,7 +51,7 @@ services:
       args:
         - APP_ENV=${APP_ENV:-production}
     image: laravel-bel-mtsn2:latest
-    container_name: laravel-bel-app
+    # Remove container_name to use default (project_app_1)
     restart: unless-stopped
     working_dir: /var/www/html
     depends_on:
@@ -113,7 +113,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: laravel-bel-mtsn2:latest
-    container_name: laravel-bel-queue
+    # Remove container_name to use default (project_queue_1)
     restart: unless-stopped
     working_dir: /var/www/html
     command: php artisan queue:work redis --verbose --tries=3 --timeout=90 --sleep=3 --max-jobs=1000
@@ -151,7 +151,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: laravel-bel-mtsn2:latest
-    container_name: laravel-bel-scheduler
+    # Remove container_name to use default (project_scheduler_1)
     restart: unless-stopped
     working_dir: /var/www/html
     command: sh -c "while true; do php artisan schedule:run --verbose --no-interaction && sleep 60; done"
@@ -183,23 +183,20 @@ services:
       - app-network
 
 # Networks
+# Using default naming (project-name_app-network) to avoid conflicts
 networks:
   app-network:
     driver: bridge
-    name: laravel-bel-network
 
 # Named Volumes (NOT host mounts)
 # This prevents the .env directory conflict issue
+# Using default naming (project-name_volume-name) to avoid conflicts
 volumes:
   postgres-data:
     driver: local
-    name: laravel-bel-postgres-data
   redis-data:
     driver: local
-    name: laravel-bel-redis-data
   app-storage:
     driver: local
-    name: laravel-bel-storage
   app-bootstrap-cache:
     driver: local
-    name: laravel-bel-bootstrap-cache
