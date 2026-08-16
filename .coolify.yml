@@ -1,0 +1,31 @@
+# Coolify Configuration
+# This file tells Coolify how to deploy the application
+
+# Build configuration
+build:
+  type: dockerfile
+  dockerfile: Dockerfile
+
+# Environment files handling
+# Tell Coolify to NOT create .env as directory
+env_files:
+  enabled: false
+
+# Post-deployment hooks
+hooks:
+  # After successful deployment, ensure .env is not a directory
+  post-deployment: |
+    # Remove .env if it's a directory (fix for Coolify bug)
+    if [ -d "/data/coolify/applications/${COOLIFY_APP_UUID}/.env" ]; then
+      echo "WARNING: .env is a directory, removing..."
+      rm -rf "/data/coolify/applications/${COOLIFY_APP_UUID}/.env"
+    fi
+
+# Health check
+health_check:
+  enabled: true
+  path: /api/health
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 40s
