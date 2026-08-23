@@ -1,5 +1,3 @@
-version: '3.8'
-
 # Proper Docker Compose for Coolify Deployment
 # Includes: Laravel App + PostgreSQL + Redis
 # Single deploy - all services included
@@ -110,9 +108,6 @@ services:
 
   # Queue Worker
   queue:
-    build:
-      context: .
-      dockerfile: Dockerfile
     image: laravel-bel-mtsn2:latest
     # Remove container_name to use default (project_queue_1)
     restart: unless-stopped
@@ -148,9 +143,6 @@ services:
 
   # Scheduler (Cron)
   scheduler:
-    build:
-      context: .
-      dockerfile: Dockerfile
     image: laravel-bel-mtsn2:latest
     # Remove container_name to use default (project_scheduler_1)
     restart: unless-stopped

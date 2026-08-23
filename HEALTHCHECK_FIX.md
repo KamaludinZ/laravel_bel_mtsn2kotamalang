@@ -212,9 +212,32 @@ If you see errors in logs:
 
 **Files Changed**:
 - `docker/nginx/default.conf` - Removed hardcoded health check
-- `docker-compose.yml` - Extended health check timing, added fallback
+- `docker-compose.yml` - Extended health check timing, added fallback, fixed build conflicts
 - `Dockerfile` - Extended health check timing, added fallback
 - `routes/api.php` - Improved health endpoint error handling
 - `docker/entrypoint.sh` - Added retry limits and better logging
 - `docker/supervisor/supervisord.conf` - Increased retries and added priorities
 - `public/health.html` - New static fallback health check
+
+## Build Fix (2026-08-23 - Second Deploy)
+
+### Issue
+Build failed with exit code 255:
+```
+Error: #2 [scheduler internal] load build definition from Dockerfile
+```
+
+### Root Cause
+Docker Compose was trying to build 3 separate images (app, queue, scheduler) from the same Dockerfile, causing build conflicts. The Dockerfile doesn't have multi-stage build targets for these services.
+
+### Solution
+Modified `docker-compose.yml` to only build image once in `app` service:
+- `app`: Has `build` section - builds the image
+- `queue`: Removed `build` section - uses pre-built image
+- `scheduler`: Removed `build` section - uses pre-built image
+
+All three services now use the same image `laravel-bel-mtsn2:latest`, differentiated only by:
+- `CONTAINER_ROLE` environment variable
+- `command` override (queue and scheduler have different commands)
+
+This ensures single build, no conflicts.
