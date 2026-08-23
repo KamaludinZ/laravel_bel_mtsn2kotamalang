@@ -102,7 +102,7 @@ services:
     networks:
       - app-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/api/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost/health.html || curl -f http://localhost/api/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5

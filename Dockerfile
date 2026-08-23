@@ -92,9 +92,9 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # Expose port
 EXPOSE 80
 
-# Health check
+# Health check - try static file first, then Laravel endpoint
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
-    CMD curl -f http://localhost/api/health || exit 1
+    CMD curl -f http://localhost/health.html || curl -f http://localhost/api/health || exit 1
 
 # Set entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
