@@ -1,17 +1,14 @@
 # Hardware Address Fix - August 23, 2026
 
 ## Issue Found
-The hardware addresses for HORN and CTRLROOM were swapped in the database, causing incorrect parent-child relationships.
+The migration initially used incorrect hardware addresses, causing child rooms to point to the wrong parent.
 
-## Original (Incorrect) Addresses
-- CTRLROOM: `10-4` ❌
-- HORN: `11-4` ❌
+## Correct Hardware Addresses (Confirmed by User)
+- CTRLROOM: `10-4` ✅ (parent for all indoor rooms)
+- HORN: `11-4` ✅ (standalone outdoor speaker)
 
-This caused all child rooms to point to HORN as their parent instead of CTRLROOM.
-
-## Corrected Addresses
-- CTRLROOM: `11-4` ✅ (parent for all indoor rooms)
-- HORN: `10-4` ✅ (standalone outdoor speaker)
+## What Was Corrected
+Updated migration and database to use the correct addresses as per the actual hardware system.
 
 ## What Was Fixed
 

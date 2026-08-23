@@ -20,12 +20,12 @@ return new class extends Migration
         });
 
         // Automatically populate parent_hardware_address
-        // All rooms except HORN (10-4) and CTRL ROOM (11-4) use CTRL ROOM as parent
+        // All rooms except HORN (11-4) and CTRL ROOM (10-4) use CTRL ROOM as parent
         DB::table('rooms')
             ->whereNotIn('hardware_address', ['10-4', '11-4'])
             ->whereNotNull('hardware_address')
             ->update([
-                'parent_hardware_address' => '11-4'
+                'parent_hardware_address' => '10-4'
             ]);
 
         // HORN and CTRL ROOM have no parent (they ARE parents)
