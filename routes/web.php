@@ -10,6 +10,11 @@ use App\Http\Controllers\PublicController;
 use App\Http\Controllers\SettingController;
 use Illuminate\Support\Facades\Route;
 
+// Emergency debug route - absolutely minimal
+Route::get('/ping', function() {
+    return 'PONG - Laravel is working!';
+});
+
 // Public Routes
 Route::get('/', [PublicController::class, 'index'])->name('public.index');
 Route::post('/activate-bell-type', [PublicController::class, 'activateBellType'])->name('public.activate-bell-type');
