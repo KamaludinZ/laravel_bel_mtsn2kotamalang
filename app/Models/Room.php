@@ -14,6 +14,7 @@ class Room extends Model
         'room_name',
         'group_name',
         'hardware_address',
+        'parent_hardware_address',
         'speaker_zone_id',
         'is_active',
         'sort_order',
@@ -85,5 +86,66 @@ class Room extends Model
             ->orderBy('room_type')
             ->pluck('room_type')
             ->toArray();
+    }
+
+    /**
+     * Get parent room by hardware address
+     */
+    public function getParentRoom(): ?Room
+    {
+        if (!$this->parent_hardware_address) {
+            return null;
+        }
+
+        return self::where('hardware_address', $this->parent_hardware_address)->first();
+    }
+
+    /**
+     * Check if this room is a parent (HORN or CTRL ROOM)
+     */
+    public function isParent(): bool
+    {
+        return in_array($this->hardware_address, ['10-4', '11-4'])
+            && is_null($this->parent_hardware_address);
+    }
+
+    /**
+     * Check if this room requires parent activation
+     */
+    public function requiresParent(): bool
+    {
+        return !is_null($this->parent_hardware_address)
+            && !is_null($this->hardware_address);
+    }
+
+    /**
+     * Get all child rooms for a parent
+     */
+    public function getChildRooms()
+    {
+        if (!$this->hardware_address) {
+            return collect();
+        }
+
+        return self::where('parent_hardware_address', $this->hardware_address)
+            ->active()
+            ->get();
+    }
+
+    /**
+     * Scope: Get all parent rooms (HORN and CTRL ROOM)
+     */
+    public function scopeParents($query)
+    {
+        return $query->whereIn('hardware_address', ['10-4', '11-4'])
+            ->whereNull('parent_hardware_address');
+    }
+
+    /**
+     * Scope: Get all child rooms (have parent)
+     */
+    public function scopeChildren($query)
+    {
+        return $query->whereNotNull('parent_hardware_address');
     }
 }

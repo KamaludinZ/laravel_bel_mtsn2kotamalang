@@ -174,53 +174,78 @@ class HardwareController extends Controller
     public function testAllZones(Request $request)
     {
         $duration = $request->input('duration', 5);
+        $commandsCreated = 0;
 
-        // Get all active rooms including PARENT (HORN, CTRLROOM) and all groups
-        $rooms = Room::with('speakerZone')
-            ->active()
-            ->whereNotNull('speaker_zone_id')
+        // Get all active rooms with hardware_address
+        $allRooms = Room::active()
+            ->whereNotNull('hardware_address')
             ->get();
 
-        if ($rooms->isEmpty()) {
-            $errorMsg = 'Tidak ada room aktif dengan speaker zone';
+        if ($allRooms->isEmpty()) {
+            $errorMsg = 'Tidak ada room aktif dengan hardware address';
             if ($request->expectsJson()) {
                 return response()->json(['error' => $errorMsg], 400);
             }
             return redirect()->back()->with('error', $errorMsg);
         }
 
-        // Get unique zones from all rooms (including PARENT channels)
-        $zones = $rooms->pluck('speakerZone.modbus_channel')->unique()->values()->toArray();
+        // Separate parents and children
+        $parents = $allRooms->filter(fn($room) => $room->isParent());
+        $children = $allRooms->filter(fn($room) => $room->requiresParent());
 
-        if (empty($zones)) {
-            $errorMsg = 'Tidak ada zone yang aktif';
-            if ($request->expectsJson()) {
-                return response()->json(['error' => $errorMsg], 400);
-            }
-            return redirect()->back()->with('error', $errorMsg);
+        // STEP 1: Activate all parents FIRST (HORN and CTRL ROOM)
+        foreach ($parents as $parent) {
+            HardwareCommandQueue::create([
+                'command_type' => 'activate_parent',
+                'payload' => [
+                    'hardware_address' => $parent->hardware_address,
+                    'room_id' => $parent->id,
+                    'room_name' => $parent->room_name,
+                    'trigger_type' => 'ON_ALL_PARENT',
+                ],
+                'status' => 'pending',
+                'scheduled_at' => now(),
+                'expires_at' => now()->addMinutes(5),
+            ]);
+            $commandsCreated++;
         }
 
-        HardwareCommandQueue::create([
-            'command_type' => 'trigger_bell',
-            'payload' => [
-                'zones' => $zones,
-                'duration_seconds' => $duration,
-                'trigger_type' => 'ON_ALL',
-                'room_count' => $rooms->count(),
-            ],
-            'status' => 'pending',
-            'scheduled_at' => now(),
-            'expires_at' => now()->addMinutes(5),
-        ]);
+        // STEP 2: Activate all children AFTER parents (2 second delay)
+        $childActivationTime = now()->addSeconds(2);
+        foreach ($children as $child) {
+            HardwareCommandQueue::create([
+                'command_type' => 'test_speaker',
+                'payload' => [
+                    'hardware_address' => $child->hardware_address,
+                    'room_id' => $child->id,
+                    'room_name' => $child->room_name,
+                    'parent_address' => $child->parent_hardware_address,
+                    'duration_seconds' => $duration,
+                    'trigger_type' => 'ON_ALL_CHILD',
+                ],
+                'status' => 'pending',
+                'scheduled_at' => $childActivationTime,
+                'expires_at' => now()->addMinutes(5),
+            ]);
+            $commandsCreated++;
+        }
 
-        $message = 'ON ALL: Mengaktifkan semua speaker (' . $rooms->count() . ' rooms, ' . count($zones) . ' zones) selama ' . $duration . ' detik';
+        $message = sprintf(
+            'ON ALL: %d parents akan diaktifkan dulu, kemudian %d children (total %d rooms) selama %d detik',
+            $parents->count(),
+            $children->count(),
+            $allRooms->count(),
+            $duration
+        );
 
         if ($request->expectsJson()) {
             return response()->json([
                 'success' => true,
                 'message' => $message,
-                'zones_count' => count($zones),
-                'room_count' => $rooms->count()
+                'parents_count' => $parents->count(),
+                'children_count' => $children->count(),
+                'total_rooms' => $allRooms->count(),
+                'commands_created' => $commandsCreated,
             ]);
         }
 
@@ -247,41 +272,89 @@ class HardwareController extends Controller
             return redirect()->back()->with('error', $errorMsg);
         }
 
-        if (!$room->speakerZone) {
-            $errorMsg = "Room {$room->room_name} belum memiliki speaker zone";
-            if ($request->expectsJson()) {
-                return response()->json(['error' => $errorMsg], 400);
-            }
-            return redirect()->back()->with('error', $errorMsg);
-        }
-
         $duration = $validated['duration'] ?? 5;
+        $commandsCreated = 0;
 
-        HardwareCommandQueue::create([
-            'command_type' => 'test_speaker',
-            'payload' => [
-                'zone' => $room->speakerZone->modbus_channel,
-                'zone_id' => $room->speakerZone->id,
-                'room_id' => $room->id,
-                'room_name' => $room->room_name,
-                'duration_seconds' => $duration,
-            ],
-            'status' => 'pending',
-            'scheduled_at' => now(),
-            'expires_at' => now()->addMinutes(5),
-        ]);
+        // STEP 1: Check if room requires parent activation
+        if ($room->requiresParent()) {
+            $parent = $room->getParentRoom();
 
-        $message = "Test room {$room->room_name} ({$room->group_name}) selama {$duration} detik telah dijadwalkan";
+            if ($parent) {
+                // Activate parent FIRST (using hardware_address directly)
+                HardwareCommandQueue::create([
+                    'command_type' => 'activate_parent',
+                    'payload' => [
+                        'hardware_address' => $parent->hardware_address,
+                        'room_id' => $parent->id,
+                        'room_name' => $parent->room_name,
+                        'parent_for' => $room->room_name,
+                    ],
+                    'status' => 'pending',
+                    'scheduled_at' => now(),
+                    'expires_at' => now()->addMinutes(5),
+                ]);
+                $commandsCreated++;
+
+                // STEP 2: Activate child room after parent (1 second delay)
+                HardwareCommandQueue::create([
+                    'command_type' => 'test_speaker',
+                    'payload' => [
+                        'hardware_address' => $room->hardware_address,
+                        'room_id' => $room->id,
+                        'room_name' => $room->room_name,
+                        'parent_address' => $parent->hardware_address,
+                        'duration_seconds' => $duration,
+                        // Keep speaker_zone for backward compatibility
+                        'zone' => $room->speakerZone?->modbus_channel,
+                        'zone_id' => $room->speakerZone?->id,
+                    ],
+                    'status' => 'pending',
+                    'scheduled_at' => now()->addSecond(),
+                    'expires_at' => now()->addMinutes(5),
+                ]);
+                $commandsCreated++;
+
+                $message = "Test room {$room->room_name}: Parent ({$parent->room_name}) akan diaktifkan dulu, kemudian room selama {$duration} detik";
+            } else {
+                $errorMsg = "Parent hardware address {$room->parent_hardware_address} tidak ditemukan";
+                if ($request->expectsJson()) {
+                    return response()->json(['error' => $errorMsg], 400);
+                }
+                return redirect()->back()->with('error', $errorMsg);
+            }
+        } else {
+            // Room is standalone (HORN/CTRL ROOM) or doesn't require parent
+            HardwareCommandQueue::create([
+                'command_type' => 'test_speaker',
+                'payload' => [
+                    'hardware_address' => $room->hardware_address,
+                    'room_id' => $room->id,
+                    'room_name' => $room->room_name,
+                    'duration_seconds' => $duration,
+                    // Keep speaker_zone for backward compatibility
+                    'zone' => $room->speakerZone?->modbus_channel,
+                    'zone_id' => $room->speakerZone?->id,
+                ],
+                'status' => 'pending',
+                'scheduled_at' => now(),
+                'expires_at' => now()->addMinutes(5),
+            ]);
+            $commandsCreated++;
+
+            $message = "Test room {$room->room_name} ({$room->group_name}) selama {$duration} detik telah dijadwalkan";
+        }
 
         if ($request->expectsJson()) {
             return response()->json([
                 'success' => true,
                 'message' => $message,
+                'commands_created' => $commandsCreated,
                 'room' => [
                     'id' => $room->id,
                     'name' => $room->room_name,
                     'group' => $room->group_name,
-                    'zone' => $room->speakerZone->modbus_channel
+                    'hardware_address' => $room->hardware_address,
+                    'requires_parent' => $room->requiresParent(),
                 ]
             ]);
         }
