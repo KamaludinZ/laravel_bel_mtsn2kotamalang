@@ -55,8 +55,9 @@ if [ "${CONTAINER_ROLE:-app}" = "app" ]; then
         php artisan db:show || echo "❌ Database connection failed"
     fi
 
-    # Seed hardware data if not exists
-    echo "🌱 Seeding hardware data..."
+    # Seed initial data if not exists
+    echo "🌱 Seeding initial data..."
+    php artisan db:seed --class=UserSeeder --force --no-interaction || echo "⚠️  UserSeeder failed (might already exist)"
     php artisan db:seed --class=HardwareSeeder --force --no-interaction || echo "⚠️  HardwareSeeder failed (might already exist)"
     php artisan db:seed --class=RoomSeeder --force --no-interaction || echo "⚠️  RoomSeeder failed (might already exist)"
 
