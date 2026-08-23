@@ -10,7 +10,7 @@ use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class BellSchedulesExport implements FromCollection, WithHeadings, WithMapping, WithStyles, WithColumnWidths
+class BellSchedulesImportableExport implements FromCollection, WithHeadings, WithMapping, WithStyles, WithColumnWidths
 {
     protected $bellTypeId;
     protected $day;
@@ -43,30 +43,24 @@ class BellSchedulesExport implements FromCollection, WithHeadings, WithMapping, 
     }
 
     /**
-     * Define the headings for the Excel sheet
+     * Define the headings for the Excel sheet (SAME as import template)
      */
     public function headings(): array
     {
         return [
-            'No',
-            'Jenis Bel',
-            'Hari',
-            'Waktu',
-            'Nama Audio',
-            'Keterangan',
-            'Dibuat Pada',
+            'jenis_bel',
+            'hari',
+            'waktu',
+            'nama_audio',
         ];
     }
 
     /**
-     * Map each row to the desired format
+     * Map each row to importable format (exactly matches import template)
      */
     public function map($schedule): array
     {
-        static $rowNumber = 0;
-        $rowNumber++;
-
-        // Map English day names to Indonesian (lowercase untuk konsistensi dengan import)
+        // Map English day names to Indonesian (lowercase for import consistency)
         $dayMap = [
             'monday' => 'senin',
             'tuesday' => 'selasa',
@@ -78,13 +72,10 @@ class BellSchedulesExport implements FromCollection, WithHeadings, WithMapping, 
         ];
 
         return [
-            $rowNumber,
-            $schedule->bellType->name ?? '-',
+            $schedule->bellType->name ?? '',
             $dayMap[$schedule->day] ?? $schedule->day,
             $schedule->time,
-            $schedule->audioLibrary->title ?? '-',
-            $schedule->keterangan ?? '-',
-            $schedule->created_at->format('d/m/Y H:i'),
+            $schedule->audioLibrary->title ?? '',
         ];
     }
 
@@ -118,13 +109,10 @@ class BellSchedulesExport implements FromCollection, WithHeadings, WithMapping, 
     public function columnWidths(): array
     {
         return [
-            'A' => 6,   // No
-            'B' => 20,  // Jenis Bel
-            'C' => 12,  // Hari
-            'D' => 10,  // Waktu
-            'E' => 25,  // Nama Audio
-            'F' => 30,  // Keterangan
-            'G' => 18,  // Dibuat Pada
+            'A' => 20,  // jenis_bel
+            'B' => 12,  // hari
+            'C' => 10,  // waktu
+            'D' => 25,  // nama_audio
         ];
     }
 }

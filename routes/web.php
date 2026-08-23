@@ -98,6 +98,7 @@ Route::middleware('auth')->group(function () {
     Route::get('bell-schedules/import', [BellScheduleController::class, 'importForm'])->name('bell-schedules.import.form');
     Route::post('bell-schedules/import', [BellScheduleController::class, 'import'])->name('bell-schedules.import');
     Route::get('bell-schedules/export', [BellScheduleController::class, 'export'])->name('bell-schedules.export');
+    Route::get('bell-schedules/export-importable', [BellScheduleController::class, 'exportImportable'])->name('bell-schedules.export-importable');
     Route::get('bell-schedules/download-template', [BellScheduleController::class, 'downloadTemplate'])->name('bell-schedules.download-template');
     Route::post('bell-schedules/bulk-update', [BellScheduleController::class, 'bulkUpdate'])->name('bell-schedules.bulk-update');
     Route::post('bell-schedules/bulk-destroy', [BellScheduleController::class, 'bulkDestroy'])->name('bell-schedules.bulk-destroy');

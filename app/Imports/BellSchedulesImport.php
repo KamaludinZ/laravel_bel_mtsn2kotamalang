@@ -57,21 +57,63 @@ class BellSchedulesImport implements ToModel, WithHeadingRow, SkipsOnError, Skip
                 return null;
             }
 
-            // Find Bell Type by name (case-insensitive, trim whitespace)
-            // Try exact match first
+            // Find Bell Type by name with smart matching
+            // 1. Try exact match (case-insensitive)
             $bellType = BellType::whereRaw('LOWER(TRIM(name)) = ?', [strtolower($jenisBel)])->first();
 
-            // If not found, try partial match or suggest alternatives
+            // 2. If not found, try partial/fuzzy match
+            if (!$bellType) {
+                $searchTerm = strtolower(trim($jenisBel));
+
+                // Try contains match
+                $bellType = BellType::whereRaw('LOWER(name) LIKE ?', ["%{$searchTerm}%"])->first();
+
+                // Or try reverse - if search term contains the DB value
+                if (!$bellType) {
+                    $allTypes = BellType::all();
+                    foreach ($allTypes as $type) {
+                        $typeName = strtolower(trim($type->name));
+                        if (str_contains($searchTerm, $typeName) || str_contains($typeName, $searchTerm)) {
+                            $bellType = $type;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // If still not found, show error with available options
             if (!$bellType) {
                 $availableTypes = BellType::pluck('name')->toArray();
                 $this->errors[] = "Jenis bel '{$jenisBel}' tidak ditemukan. Yang tersedia: " . implode(', ', $availableTypes);
                 return null;
             }
 
-            // Find Audio Library by title (case-insensitive, trim whitespace)
+            // Find Audio Library by title with smart matching
+            // 1. Try exact match (case-insensitive)
             $audioLibrary = AudioLibrary::whereRaw('LOWER(TRIM(title)) = ?', [strtolower($namaAudio)])->first();
+
+            // 2. If not found, try partial/fuzzy match
             if (!$audioLibrary) {
-                // Provide helpful error with sample of available audio
+                $searchTerm = strtolower(trim($namaAudio));
+
+                // Try contains match
+                $audioLibrary = AudioLibrary::whereRaw('LOWER(title) LIKE ?', ["%{$searchTerm}%"])->first();
+
+                // Or try reverse - if search term contains the DB value
+                if (!$audioLibrary) {
+                    $allAudio = AudioLibrary::all();
+                    foreach ($allAudio as $audio) {
+                        $audioTitle = strtolower(trim($audio->title));
+                        if (str_contains($searchTerm, $audioTitle) || str_contains($audioTitle, $searchTerm)) {
+                            $audioLibrary = $audio;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // If still not found, show error with available options
+            if (!$audioLibrary) {
                 $sampleAudio = AudioLibrary::limit(5)->pluck('title')->toArray();
                 $totalAudio = AudioLibrary::count();
                 $availableInfo = "Contoh audio yang tersedia: " . implode(', ', $sampleAudio);

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Imports\BellSchedulesImport;
 use App\Exports\BellSchedulesExport;
+use App\Exports\BellSchedulesImportableExport;
 use App\Models\AudioLibrary;
 use App\Models\BellSchedule;
 use App\Models\BellType;
@@ -219,20 +220,34 @@ class BellScheduleController extends Controller
     }
 
     /**
-     * Export schedules to Excel.
+     * Export schedules to Excel (detailed with extra columns).
      */
     public function export(Request $request)
     {
         $bellTypeId = $request->input('bell_type_id');
         $day = $request->input('day');
 
-        $filename = 'jadwal_bel_' . date('Y-m-d_His') . '.xlsx';
+        $filename = 'jadwal_bel_detail_' . date('Y-m-d_His') . '.xlsx';
 
         return Excel::download(new BellSchedulesExport($bellTypeId, $day), $filename);
     }
 
     /**
-     * Download template Excel.
+     * Export schedules in importable format (4 columns only: jenis_bel, hari, waktu, nama_audio).
+     * File ini bisa langsung diupload kembali via import.
+     */
+    public function exportImportable(Request $request)
+    {
+        $bellTypeId = $request->input('bell_type_id');
+        $day = $request->input('day');
+
+        $filename = 'jadwal_bel_import_' . date('Y-m-d_His') . '.xlsx';
+
+        return Excel::download(new BellSchedulesImportableExport($bellTypeId, $day), $filename);
+    }
+
+    /**
+     * Download template Excel with REAL data from database.
      */
     public function downloadTemplate()
     {
@@ -241,17 +256,42 @@ class BellScheduleController extends Controller
             'Content-Disposition' => 'attachment; filename="template_jadwal_bel.xlsx"',
         ];
 
-        // Create simple template
+        // Get actual data from database for realistic template
+        $bellType = BellType::first(); // Get first bell type
+        $audio = AudioLibrary::first(); // Get first audio
+
+        // Create template with REAL data examples
         $data = [
             ['jenis_bel', 'hari', 'waktu', 'nama_audio'],
-            ['Jadwal Normal', 'senin', '07:00', 'Bel Masuk'],
-            ['Jadwal Normal', 'senin', '12:00', 'Bel Istirahat'],
         ];
+
+        // If we have real data, use it; otherwise use fallback
+        if ($bellType && $audio) {
+            $data[] = [$bellType->name, 'senin', '07:00', $audio->title];
+            $data[] = [$bellType->name, 'senin', '12:00', $audio->title];
+            $data[] = [$bellType->name, 'selasa', '07:00', $audio->title];
+        } else {
+            // Fallback if no data exists yet
+            $data[] = ['Hari Normal', 'senin', '07:00', 'Bel Masuk'];
+            $data[] = ['Hari Normal', 'senin', '12:00', 'Bel Istirahat'];
+        }
 
         return response()->streamDownload(function () use ($data) {
             $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
             $sheet->fromArray($data);
+
+            // Auto-size columns
+            foreach(range('A','D') as $col) {
+                $sheet->getColumnDimension($col)->setAutoSize(true);
+            }
+
+            // Style header row
+            $sheet->getStyle('A1:D1')->getFont()->setBold(true);
+            $sheet->getStyle('A1:D1')->getFill()
+                ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                ->getStartColor()->setRGB('4472C4');
+            $sheet->getStyle('A1:D1')->getFont()->getColor()->setRGB('FFFFFF');
 
             $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
             $writer->save('php://output');
