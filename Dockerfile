@@ -51,13 +51,15 @@ COPY . .
 
 # Install PHP dependencies
 # Using --no-scripts to avoid premature script execution
-RUN composer install \
+RUN composer diagnose || true && \
+    composer install \
     --no-dev \
     --prefer-dist \
     --no-interaction \
     --ignore-platform-reqs \
     --no-scripts \
-    --optimize-autoloader
+    --optimize-autoloader \
+    --verbose
 
 # Install NPM dependencies and build assets
 RUN npm ci && npm run build
