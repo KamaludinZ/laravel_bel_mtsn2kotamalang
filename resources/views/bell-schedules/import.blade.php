@@ -14,7 +14,15 @@
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             @if (session('error'))
                 <div class="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative dark:bg-red-800 dark:border-red-600 dark:text-red-200" role="alert">
-                    <span class="block sm:inline">{{ session('error') }}</span>
+                    <strong class="font-bold">Error!</strong>
+                    <span class="block sm:inline whitespace-pre-line">{{ session('error') }}</span>
+                </div>
+            @endif
+
+            @if (session('warning'))
+                <div class="mb-4 bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative dark:bg-yellow-800 dark:border-yellow-600 dark:text-yellow-200" role="alert">
+                    <strong class="font-bold">Perhatian!</strong>
+                    <span class="block sm:inline whitespace-pre-line">{{ session('warning') }}</span>
                 </div>
             @endif
 

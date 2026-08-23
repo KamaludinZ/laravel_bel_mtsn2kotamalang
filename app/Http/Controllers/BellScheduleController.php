@@ -149,12 +149,55 @@ class BellScheduleController extends Controller
         ]);
 
         try {
-            Excel::import(new BellSchedulesImport, $request->file('file'));
+            $import = new BellSchedulesImport;
+            Excel::import($import, $request->file('file'));
+
+            $successCount = $import->getSuccessCount();
+            $errors = $import->getErrors();
+
+            // Build feedback message
+            $message = "Import selesai: {$successCount} jadwal berhasil ditambahkan.";
+
+            if (!empty($errors)) {
+                $errorCount = count($errors);
+                $message .= " {$errorCount} baris dilewati karena error.";
+
+                // Show first 5 errors as examples
+                $errorSamples = array_slice($errors, 0, 5);
+                $errorDetails = implode("\n", $errorSamples);
+
+                if ($errorCount > 5) {
+                    $errorDetails .= "\n... dan " . ($errorCount - 5) . " error lainnya.";
+                }
+
+                \Log::warning('Import errors:', $errors);
+
+                if ($successCount > 0) {
+                    return redirect()->route('bell-schedules.index')
+                        ->with('warning', $message . "\n\nContoh error:\n" . $errorDetails);
+                } else {
+                    return back()
+                        ->with('error', $message . "\n\nDetail error:\n" . $errorDetails);
+                }
+            }
 
             return redirect()->route('bell-schedules.index')
-                ->with('success', 'Jadwal berhasil diimport dari Excel');
+                ->with('success', $message);
+
+        } catch (\Maatwebsite\Excel\Validators\ValidationException $e) {
+            $failures = $e->failures();
+            $errorMessages = [];
+
+            foreach ($failures as $failure) {
+                $errorMessages[] = "Baris {$failure->row()}: " . implode(', ', $failure->errors());
+            }
+
+            return back()
+                ->with('error', 'Validasi gagal:\n' . implode("\n", array_slice($errorMessages, 0, 10)));
+
         } catch (\Exception $e) {
-            return back()->with('error', 'Gagal import Excel: ' . $e->getMessage());
+            \Log::error('Import exception:', ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            return back()->with('error', 'Gagal import file: ' . $e->getMessage());
         }
     }
 
