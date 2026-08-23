@@ -427,10 +427,9 @@ class HardwareController extends Controller
             'duration' => 'nullable|integer|min:1|max:300',
         ]);
 
-        $rooms = Room::with('speakerZone')
-            ->active()
+        $rooms = Room::active()
             ->byType($validated['room_type'])
-            ->whereNotNull('speaker_zone_id')
+            ->whereNotNull('hardware_address')
             ->get();
 
         if ($rooms->isEmpty()) {
@@ -442,34 +441,107 @@ class HardwareController extends Controller
         }
 
         $duration = $validated['duration'] ?? 5;
-        $zones = $rooms->pluck('speakerZone.modbus_channel')->unique()->values()->toArray();
+        $now = now();
 
-        HardwareCommandQueue::create([
-            'command_type' => 'trigger_bell',
-            'payload' => [
-                'zones' => $zones,
-                'room_type' => $validated['room_type'],
-                'room_count' => $rooms->count(),
-                'duration_seconds' => $duration,
-            ],
-            'status' => 'pending',
-            'scheduled_at' => now(),
-            'expires_at' => now()->addMinutes(5),
-        ]);
+        // Separate parents and children
+        $parents = $rooms->filter(fn($room) => $room->isParent());
+        $children = $rooms->filter(fn($room) => $room->requiresParent());
 
-        $message = "Test tipe {$validated['room_type']} ({$rooms->count()} rooms) selama {$duration} detik telah dijadwalkan";
+        // If testing parent types (HORN or CTRLROOM), just activate them
+        if ($parents->isNotEmpty()) {
+            foreach ($parents as $parent) {
+                HardwareCommandQueue::create([
+                    'command_type' => 'activate_parent',
+                    'payload' => [
+                        'hardware_address' => $parent->hardware_address,
+                        'room_id' => $parent->id,
+                        'room_name' => $parent->room_name,
+                        'duration_seconds' => $duration,
+                        'trigger_type' => 'TEST_TYPE',
+                    ],
+                    'status' => 'pending',
+                    'scheduled_at' => $now,
+                    'expires_at' => $now->copy()->addMinutes(5),
+                ]);
+            }
 
-        if ($request->expectsJson()) {
-            return response()->json([
-                'success' => true,
-                'message' => $message,
-                'room_type' => $validated['room_type'],
-                'room_count' => $rooms->count(),
-                'zones' => $zones
-            ]);
+            $message = "Test tipe {$validated['room_type']} ({$parents->count()} parent rooms) selama {$duration} detik telah dijadwalkan";
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => $message,
+                    'room_type' => $validated['room_type'],
+                    'room_count' => $parents->count(),
+                ]);
+            }
+
+            return redirect()->back()->with('success', $message);
         }
 
-        return redirect()->back()->with('success', $message);
+        // If testing child types, activate their parents first, then children
+        if ($children->isNotEmpty()) {
+            // Get unique parents for these children
+            $parentAddresses = $children->pluck('parent_hardware_address')->unique()->filter();
+            $parentRooms = Room::whereIn('hardware_address', $parentAddresses)->get();
+
+            // Step 1: Activate parents
+            foreach ($parentRooms as $parent) {
+                HardwareCommandQueue::create([
+                    'command_type' => 'activate_parent',
+                    'payload' => [
+                        'hardware_address' => $parent->hardware_address,
+                        'room_id' => $parent->id,
+                        'room_name' => $parent->room_name,
+                        'trigger_type' => 'TEST_TYPE_PARENT',
+                        'for_room_type' => $validated['room_type'],
+                    ],
+                    'status' => 'pending',
+                    'scheduled_at' => $now,
+                    'expires_at' => $now->copy()->addMinutes(5),
+                ]);
+            }
+
+            // Step 2: Activate children (2 second delay)
+            $childActivationTime = $now->copy()->addSeconds(2);
+            foreach ($children as $child) {
+                HardwareCommandQueue::create([
+                    'command_type' => 'test_speaker',
+                    'payload' => [
+                        'hardware_address' => $child->hardware_address,
+                        'room_id' => $child->id,
+                        'room_name' => $child->room_name,
+                        'parent_address' => $child->parent_hardware_address,
+                        'duration_seconds' => $duration,
+                        'trigger_type' => 'TEST_TYPE_CHILD',
+                    ],
+                    'status' => 'pending',
+                    'scheduled_at' => $childActivationTime,
+                    'expires_at' => $now->copy()->addMinutes(5),
+                ]);
+            }
+
+            $message = "Test tipe {$validated['room_type']}: {$parentRooms->count()} parent(s) + {$children->count()} child room(s) selama {$duration} detik telah dijadwalkan";
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => $message,
+                    'room_type' => $validated['room_type'],
+                    'room_count' => $children->count(),
+                    'parent_count' => $parentRooms->count(),
+                ]);
+            }
+
+            return redirect()->back()->with('success', $message);
+        }
+
+        // Fallback: no valid rooms found
+        $errorMsg = "Tidak ada room dengan hardware address yang valid untuk tipe {$validated['room_type']}";
+        if ($request->expectsJson()) {
+            return response()->json(['error' => $errorMsg], 400);
+        }
+        return redirect()->back()->with('error', $errorMsg);
     }
 
     /**
