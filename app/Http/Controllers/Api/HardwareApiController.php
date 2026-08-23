@@ -46,8 +46,13 @@ class HardwareApiController extends Controller
                 $config->updateStatus('online');
             }
 
-            // Get pending commands that haven't expired
+            // Get pending commands that haven't expired AND should run now (scheduled_at <= now)
+            $now = now();
             $commands = HardwareCommandQueue::pending()
+                ->where(function($query) use ($now) {
+                    $query->whereNull('scheduled_at')
+                          ->orWhere('scheduled_at', '<=', $now);
+                })
                 ->orderBy('scheduled_at')
                 ->limit(10) // Max 10 commands per poll
                 ->get()
