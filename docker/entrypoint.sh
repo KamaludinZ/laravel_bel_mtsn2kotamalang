@@ -75,15 +75,34 @@ if [ "${CONTAINER_ROLE:-app}" = "app" ]; then
         echo "✅ Config cached"
     else
         echo "❌ Config cache failed - this might cause issues!"
+        echo "ℹ️  Showing config status..."
+        php artisan config:show app --json || true
     fi
 
-    php artisan route:cache || echo "⚠️  Route cache failed"
-    php artisan view:cache || echo "⚠️  View cache failed"
+    if php artisan route:cache; then
+        echo "✅ Routes cached"
+    else
+        echo "⚠️  Route cache failed"
+    fi
+
+    if php artisan view:cache; then
+        echo "✅ Views cached"
+    else
+        echo "⚠️  View cache failed"
+    fi
 
     # Optimize for production
     if [ "$APP_ENV" = "production" ]; then
         echo "⚡ Optimizing for production..."
         php artisan optimize || echo "⚠️  Optimization failed"
+    fi
+
+    # Test if Laravel can boot
+    echo "🧪 Testing Laravel bootstrap..."
+    if php artisan about --only=environment 2>&1 | head -5; then
+        echo "✅ Laravel bootstrap successful"
+    else
+        echo "❌ Laravel bootstrap failed!"
     fi
 
     echo "✅ Application setup completed!"

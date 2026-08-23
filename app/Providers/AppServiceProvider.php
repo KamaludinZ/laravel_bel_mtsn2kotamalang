@@ -28,11 +28,19 @@ class AppServiceProvider extends ServiceProvider
         // Share app settings to all views
         view()->composer('*', function ($view) {
             try {
-                $view->with('appName', \App\Models\Setting::get('app_name', config('app.name')));
-                $view->with('appLogo', \App\Models\Setting::get('app_logo'));
-            } catch (\Exception $e) {
-                // Fallback if settings table doesn't exist yet or has issues
-                $view->with('appName', config('app.name', 'Laravel'));
+                // Check if settings table exists before querying
+                if (\Schema::hasTable('settings')) {
+                    $view->with('appName', \App\Models\Setting::get('app_name', config('app.name')));
+                    $view->with('appLogo', \App\Models\Setting::get('app_logo'));
+                } else {
+                    // Table doesn't exist yet, use defaults
+                    $view->with('appName', config('app.name', 'Bel Sekolah'));
+                    $view->with('appLogo', null);
+                }
+            } catch (\Throwable $e) {
+                // Fallback if any error occurs
+                \Log::warning('AppServiceProvider view composer error: ' . $e->getMessage());
+                $view->with('appName', config('app.name', 'Bel Sekolah'));
                 $view->with('appLogo', null);
             }
         });
