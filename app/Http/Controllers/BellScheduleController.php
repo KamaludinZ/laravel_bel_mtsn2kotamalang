@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Imports\BellSchedulesImport;
+use App\Exports\BellSchedulesExport;
 use App\Models\AudioLibrary;
 use App\Models\BellSchedule;
 use App\Models\BellType;
@@ -199,6 +200,19 @@ class BellScheduleController extends Controller
             \Log::error('Import exception:', ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return back()->with('error', 'Gagal import file: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Export schedules to Excel.
+     */
+    public function export(Request $request)
+    {
+        $bellTypeId = $request->input('bell_type_id');
+        $day = $request->input('day');
+
+        $filename = 'jadwal_bel_' . date('Y-m-d_His') . '.xlsx';
+
+        return Excel::download(new BellSchedulesExport($bellTypeId, $day), $filename);
     }
 
     /**
