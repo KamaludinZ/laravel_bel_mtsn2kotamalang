@@ -15,24 +15,39 @@ use Illuminate\Support\Facades\Route;
 
 // Health Check Endpoint (for Docker healthcheck and monitoring)
 Route::get('/health', function () {
+    $services = [];
+    $healthy = true;
+
     try {
         // Check database connection
-        \DB::connection()->getPdo();
-
-        // Check Redis connection (if using Redis)
-        if (config('cache.default') === 'redis') {
-            \Cache::driver('redis')->get('health_check');
+        try {
+            \DB::connection()->getPdo();
+            $services['database'] = 'connected';
+        } catch (\Exception $e) {
+            $services['database'] = 'error: ' . $e->getMessage();
+            $healthy = false;
         }
 
+        // Check Redis connection (if using Redis)
+        try {
+            if (config('cache.default') === 'redis') {
+                \Cache::driver('redis')->get('health_check');
+                $services['cache'] = 'connected';
+            } else {
+                $services['cache'] = 'not_configured';
+            }
+        } catch (\Exception $e) {
+            $services['cache'] = 'error: ' . $e->getMessage();
+            // Don't mark as unhealthy if cache fails - app can still work
+        }
+
+        $services['app'] = 'running';
+
         return response()->json([
-            'status' => 'healthy',
+            'status' => $healthy ? 'healthy' : 'unhealthy',
             'timestamp' => now()->toIso8601String(),
-            'services' => [
-                'database' => 'connected',
-                'cache' => 'connected',
-                'app' => 'running'
-            ]
-        ], 200);
+            'services' => $services
+        ], $healthy ? 200 : 503);
     } catch (\Exception $e) {
         return response()->json([
             'status' => 'unhealthy',
