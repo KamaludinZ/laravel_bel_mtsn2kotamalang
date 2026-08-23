@@ -241,3 +241,41 @@ All three services now use the same image `laravel-bel-mtsn2:latest`, differenti
 - `command` override (queue and scheduler have different commands)
 
 This ensures single build, no conflicts.
+
+## Runtime Fixes (2026-08-23 - Third Deploy)
+
+### Issues Found in Runtime Logs
+
+1. **Supervisor Log Directory Error** (CRITICAL)
+```
+Error: The directory named as part of the path /var/log/supervisor/supervisord.log does not exist
+```
+**Root Cause**: supervisord.conf tried to write logs to `/var/log/supervisor/` which doesn't exist in Alpine container.
+
+**Solution**: Changed supervisor to log to stdout instead:
+```ini
+logfile=/dev/stdout
+logfile_maxbytes=0
+```
+
+2. **RoomSeeder Duplicate Key Error** (WARNING - repeated on every restart)
+```
+SQLSTATE[23505]: Unique violation: duplicate key value violates unique constraint "rooms_no_unique"
+DETAIL: Key (no)=(41) already exists.
+```
+
+**Root Cause**: RoomSeeder used `create()` which fails on re-deploy when data already exists.
+
+**Solution**: Changed to `updateOrCreate()` for idempotent seeding:
+```php
+Room::updateOrCreate(
+    ['no' => $roomData['no']], // Match by unique key
+    [...] // Update fields
+);
+```
+
+Now shows: `✓ Created 0 rooms, Updated 45 rooms` on re-deploy instead of errors.
+
+### Files Changed
+- `docker/supervisor/supervisord.conf` - Changed log to stdout
+- `database/seeders/RoomSeeder.php` - Use updateOrCreate for idempotency

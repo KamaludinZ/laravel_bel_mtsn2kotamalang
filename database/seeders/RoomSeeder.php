@@ -81,6 +81,9 @@ class RoomSeeder extends Seeder
             ['no' => 58, 'room_code' => 'RES8', 'room_type' => 'RESERVED', 'room_name' => 'Reserved 8', 'group_name' => 'CUSTOM 1', 'hardware_address' => null, 'zone_channel' => null],
         ];
 
+        $created = 0;
+        $updated = 0;
+
         foreach ($rooms as $index => $roomData) {
             // Get speaker zone if channel is specified
             $zoneId = null;
@@ -91,20 +94,29 @@ class RoomSeeder extends Seeder
                 }
             }
 
-            Room::create([
-                'no' => $roomData['no'],
-                'room_code' => $roomData['room_code'],
-                'room_type' => $roomData['room_type'],
-                'room_name' => $roomData['room_name'],
-                'group_name' => $roomData['group_name'],
-                'hardware_address' => $roomData['hardware_address'],
-                'speaker_zone_id' => $zoneId,
-                'is_active' => true,
-                'sort_order' => $index + 1,
-            ]);
+            // Use updateOrCreate to avoid duplicate key errors on re-deploy
+            $room = Room::updateOrCreate(
+                ['no' => $roomData['no']], // Match by 'no' field (unique)
+                [
+                    'room_code' => $roomData['room_code'],
+                    'room_type' => $roomData['room_type'],
+                    'room_name' => $roomData['room_name'],
+                    'group_name' => $roomData['group_name'],
+                    'hardware_address' => $roomData['hardware_address'],
+                    'speaker_zone_id' => $zoneId,
+                    'is_active' => true,
+                    'sort_order' => $index + 1,
+                ]
+            );
+
+            if ($room->wasRecentlyCreated) {
+                $created++;
+            } else {
+                $updated++;
+            }
         }
 
-        $this->command->info('✓ Created ' . count($rooms) . ' rooms');
+        $this->command->info('✓ Created ' . $created . ' rooms, Updated ' . $updated . ' rooms');
         $this->command->info('');
         $this->command->info('Rooms data seeded successfully! 🎉');
     }
