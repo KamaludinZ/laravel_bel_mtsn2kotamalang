@@ -58,16 +58,27 @@ class BellSchedulesImport implements ToModel, WithHeadingRow, SkipsOnError, Skip
             }
 
             // Find Bell Type by name (case-insensitive, trim whitespace)
+            // Try exact match first
             $bellType = BellType::whereRaw('LOWER(TRIM(name)) = ?', [strtolower($jenisBel)])->first();
+
+            // If not found, try partial match or suggest alternatives
             if (!$bellType) {
-                $this->errors[] = "Jenis bel '{$jenisBel}' tidak ditemukan di sistem. Gunakan salah satu: " . BellType::pluck('name')->implode(', ');
+                $availableTypes = BellType::pluck('name')->toArray();
+                $this->errors[] = "Jenis bel '{$jenisBel}' tidak ditemukan. Yang tersedia: " . implode(', ', $availableTypes);
                 return null;
             }
 
             // Find Audio Library by title (case-insensitive, trim whitespace)
             $audioLibrary = AudioLibrary::whereRaw('LOWER(TRIM(title)) = ?', [strtolower($namaAudio)])->first();
             if (!$audioLibrary) {
-                $this->errors[] = "Audio '{$namaAudio}' tidak ditemukan di pustaka audio. Pastikan audio sudah ada di sistem.";
+                // Provide helpful error with sample of available audio
+                $sampleAudio = AudioLibrary::limit(5)->pluck('title')->toArray();
+                $totalAudio = AudioLibrary::count();
+                $availableInfo = "Contoh audio yang tersedia: " . implode(', ', $sampleAudio);
+                if ($totalAudio > 5) {
+                    $availableInfo .= " (dan " . ($totalAudio - 5) . " lainnya)";
+                }
+                $this->errors[] = "Audio '{$namaAudio}' tidak ditemukan. {$availableInfo}. Silakan upload audio terlebih dahulu di menu Audio Library.";
                 return null;
             }
 
