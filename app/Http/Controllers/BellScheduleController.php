@@ -151,7 +151,13 @@ class BellScheduleController extends Controller
 
         try {
             $import = new BellSchedulesImport;
-            Excel::import($import, $request->file('file'));
+
+            try {
+                Excel::import($import, $request->file('file'));
+            } catch (\PhpOffice\PhpSpreadsheet\Reader\Exception $e) {
+                \Log::error('Excel file read error:', ['message' => $e->getMessage()]);
+                return back()->with('error', 'Format file tidak valid atau file corrupt. Pastikan file adalah Excel/CSV yang valid.');
+            }
 
             $successCount = $import->getSuccessCount();
             $errors = $import->getErrors();
@@ -193,12 +199,22 @@ class BellScheduleController extends Controller
                 $errorMessages[] = "Baris {$failure->row()}: " . implode(', ', $failure->errors());
             }
 
+            \Log::error('Import validation failed:', ['errors' => $errorMessages]);
             return back()
                 ->with('error', 'Validasi gagal:\n' . implode("\n", array_slice($errorMessages, 0, 10)));
 
-        } catch (\Exception $e) {
-            \Log::error('Import exception:', ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
-            return back()->with('error', 'Gagal import file: ' . $e->getMessage());
+        } catch (\Illuminate\Database\QueryException $e) {
+            \Log::error('Database error during import:', ['message' => $e->getMessage(), 'code' => $e->getCode()]);
+            return back()->with('error', 'Error database saat import: ' . $e->getMessage());
+
+        } catch (\Throwable $e) {
+            \Log::error('Import exception:', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return back()->with('error', 'Gagal import file: ' . $e->getMessage() . ' (Line: ' . $e->getLine() . ')');
         }
     }
 
