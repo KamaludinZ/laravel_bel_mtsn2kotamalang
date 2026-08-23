@@ -279,3 +279,106 @@ Now shows: `✓ Created 0 rooms, Updated 45 rooms` on re-deploy instead of error
 ### Files Changed
 - `docker/supervisor/supervisord.conf` - Changed log to stdout
 - `database/seeders/RoomSeeder.php` - Use updateOrCreate for idempotency
+
+## HTTPS & 500 Error Fixes (2026-08-23 - Fourth Deploy)
+
+### Issues Found
+Container healthy and running, but browser showed:
+
+1. **500 Internal Server Error**
+```
+GET https://bell.mtsn2kotamalang.sch.id/ 500 (Internal Server Error)
+```
+
+2. **Mixed Content Errors** (HTTPS/HTTP mismatch)
+```
+Mixed Content: The page at 'https://bell.mtsn2kotamalang.sch.id/' was loaded over HTTPS,
+but requested an insecure stylesheet 'http://bell.mtsn2kotamalang.sch.id/build/assets/app-BXgCNn_d.css'.
+This request has been blocked; the content must be served over HTTPS.
+```
+
+### Root Causes
+
+**1. No HTTPS Forcing**
+- Laravel generated asset URLs with `http://` instead of `https://`
+- Site served via HTTPS (Coolify reverse proxy) but assets used HTTP
+- Browser blocked mixed content for security
+
+**2. No Proxy Trust Configuration**
+- Laravel didn't recognize requests came through reverse proxy
+- `X-Forwarded-Proto` header not trusted
+- Laravel thought all requests were HTTP even when proxied via HTTPS
+
+**3. AppServiceProvider View Composer Error**
+- Tried to access `Setting::get()` on every view
+- If `settings` table missing or error occurred, 500 error
+- No error handling for database failures
+
+### Solutions Applied
+
+**1. Force HTTPS in Production**
+**File**: `app/Providers/AppServiceProvider.php`
+
+Added URL forcing:
+```php
+use Illuminate\Support\Facades\URL;
+
+public function boot(): void
+{
+    // Force HTTPS in production (when behind reverse proxy like Coolify)
+    if (config('app.env') === 'production') {
+        URL::forceScheme('https');
+    }
+}
+```
+
+**2. Trust Reverse Proxy Headers**
+**File**: `bootstrap/app.php`
+
+```php
+->withMiddleware(function (Middleware $middleware): void {
+    // Trust proxies for HTTPS detection behind reverse proxy (Coolify)
+    $middleware->trustProxies(at: '*');
+})
+```
+
+**File**: `app/Http/Middleware/TrustProxies.php` (created)
+
+```php
+protected $proxies = '*'; // Trust all proxies
+
+protected $headers =
+    Request::HEADER_X_FORWARDED_FOR |
+    Request::HEADER_X_FORWARDED_HOST |
+    Request::HEADER_X_FORWARDED_PORT |
+    Request::HEADER_X_FORWARDED_PROTO |
+    Request::HEADER_X_FORWARDED_AWS_ELB;
+```
+
+**3. Add Error Handling in View Composer**
+**File**: `app/Providers/AppServiceProvider.php`
+
+```php
+view()->composer('*', function ($view) {
+    try {
+        $view->with('appName', \App\Models\Setting::get('app_name', config('app.name')));
+        $view->with('appLogo', \App\Models\Setting::get('app_logo'));
+    } catch (\Exception $e) {
+        // Fallback if settings table doesn't exist or has issues
+        $view->with('appName', config('app.name', 'Laravel'));
+        $view->with('appLogo', null);
+    }
+});
+```
+
+### Expected Results
+- ✅ Site loads with 200 OK (no more 500 errors)
+- ✅ All assets load via HTTPS (no mixed content errors)
+- ✅ Asset URLs: `https://bell.mtsn2kotamalang.sch.id/build/assets/...`
+- ✅ Laravel recognizes HTTPS correctly from proxy headers
+- ✅ No crashes if settings table has issues
+
+### Files Changed
+- `app/Providers/AppServiceProvider.php` - HTTPS forcing & error handling
+- `bootstrap/app.php` - Trust proxies configuration
+- `app/Http/Middleware/TrustProxies.php` - Proxy trust middleware (new)
