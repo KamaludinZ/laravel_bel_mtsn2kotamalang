@@ -169,11 +169,10 @@ class HardwareController extends Controller
     }
 
     /**
-     * Test all zones at once (ON ALL - aktivasi PARENT + semua grup)
+     * Test all zones at once (ON ALL - aktivasi PARENT + semua grup) - NO DURATION
      */
     public function testAllZones(Request $request)
     {
-        $duration = $request->input('duration', 5);
         $commandsCreated = 0;
 
         // Get all active rooms with hardware_address
@@ -193,15 +192,15 @@ class HardwareController extends Controller
         $parents = $allRooms->filter(fn($room) => $room->isParent());
         $children = $allRooms->filter(fn($room) => $room->requiresParent());
 
-        // STEP 1: Activate all parents FIRST (HORN and CTRL ROOM)
+        // STEP 1: Activate all parents FIRST (HORN and CTRL ROOM) - NO DURATION
         foreach ($parents as $parent) {
             HardwareCommandQueue::create([
-                'command_type' => 'activate_parent',
+                'command_type' => 'activate_speaker',
                 'payload' => [
                     'hardware_address' => $parent->hardware_address,
                     'room_id' => $parent->id,
                     'room_name' => $parent->room_name,
-                    'trigger_type' => 'ON_ALL_PARENT',
+                    'trigger_type' => 'MANUAL_ON_ALL_PARENT',
                 ],
                 'status' => 'pending',
                 'scheduled_at' => now(),
@@ -210,18 +209,17 @@ class HardwareController extends Controller
             $commandsCreated++;
         }
 
-        // STEP 2: Activate all children AFTER parents (2 second delay)
+        // STEP 2: Activate all children AFTER parents (2 second delay) - NO DURATION
         $childActivationTime = now()->addSeconds(2);
         foreach ($children as $child) {
             HardwareCommandQueue::create([
-                'command_type' => 'test_speaker',
+                'command_type' => 'activate_speaker',
                 'payload' => [
                     'hardware_address' => $child->hardware_address,
                     'room_id' => $child->id,
                     'room_name' => $child->room_name,
                     'parent_address' => $child->parent_hardware_address,
-                    'duration_seconds' => $duration,
-                    'trigger_type' => 'ON_ALL_CHILD',
+                    'trigger_type' => 'MANUAL_ON_ALL_CHILD',
                 ],
                 'status' => 'pending',
                 'scheduled_at' => $childActivationTime,
@@ -231,11 +229,10 @@ class HardwareController extends Controller
         }
 
         $message = sprintf(
-            'ON ALL: %d parents akan diaktifkan dulu, kemudian %d children (total %d rooms) selama %d detik',
+            'ON ALL: %d parents + %d children (total %d rooms) diaktifkan (tetap aktif sampai dimatikan manual)',
             $parents->count(),
             $children->count(),
-            $allRooms->count(),
-            $duration
+            $allRooms->count()
         );
 
         if ($request->expectsJson()) {
@@ -253,13 +250,13 @@ class HardwareController extends Controller
     }
 
     /**
-     * Test individual room
+     * Test individual room (TOGGLE ON - Aktivasi tanpa durasi)
      */
     public function testRoom(Request $request)
     {
         $validated = $request->validate([
             'room_id' => 'required|exists:rooms,id',
-            'duration' => 'nullable|integer|min:1|max:300',
+            'duration' => 'nullable|integer|min:1|max:300', // Not used for manual activation
         ]);
 
         $room = Room::with('speakerZone')->findOrFail($validated['room_id']);
@@ -272,7 +269,6 @@ class HardwareController extends Controller
             return redirect()->back()->with('error', $errorMsg);
         }
 
-        $duration = $validated['duration'] ?? 5;
         $commandsCreated = 0;
 
         // STEP 1: Check if room requires parent activation
@@ -280,14 +276,15 @@ class HardwareController extends Controller
             $parent = $room->getParentRoom();
 
             if ($parent) {
-                // Activate parent FIRST (using hardware_address directly)
+                // Activate parent FIRST (using hardware_address directly) - NO DURATION
                 HardwareCommandQueue::create([
-                    'command_type' => 'activate_parent',
+                    'command_type' => 'activate_speaker',
                     'payload' => [
                         'hardware_address' => $parent->hardware_address,
                         'room_id' => $parent->id,
                         'room_name' => $parent->room_name,
                         'parent_for' => $room->room_name,
+                        'trigger_type' => 'MANUAL_PARENT',
                     ],
                     'status' => 'pending',
                     'scheduled_at' => now(),
@@ -295,15 +292,15 @@ class HardwareController extends Controller
                 ]);
                 $commandsCreated++;
 
-                // STEP 2: Activate child room after parent (1 second delay)
+                // STEP 2: Activate child room after parent (1 second delay) - NO DURATION
                 HardwareCommandQueue::create([
-                    'command_type' => 'test_speaker',
+                    'command_type' => 'activate_speaker',
                     'payload' => [
                         'hardware_address' => $room->hardware_address,
                         'room_id' => $room->id,
                         'room_name' => $room->room_name,
                         'parent_address' => $parent->hardware_address,
-                        'duration_seconds' => $duration,
+                        'trigger_type' => 'MANUAL_CHILD',
                         // Keep speaker_zone for backward compatibility
                         'zone' => $room->speakerZone?->modbus_channel,
                         'zone_id' => $room->speakerZone?->id,
@@ -314,7 +311,7 @@ class HardwareController extends Controller
                 ]);
                 $commandsCreated++;
 
-                $message = "Test room {$room->room_name}: Parent ({$parent->room_name}) akan diaktifkan dulu, kemudian room selama {$duration} detik";
+                $message = "Speaker {$room->room_name} diaktifkan: Parent ({$parent->room_name}) ON → Room ON (tetap aktif sampai dimatikan manual)";
             } else {
                 $errorMsg = "Parent hardware address {$room->parent_hardware_address} tidak ditemukan";
                 if ($request->expectsJson()) {
@@ -323,14 +320,14 @@ class HardwareController extends Controller
                 return redirect()->back()->with('error', $errorMsg);
             }
         } else {
-            // Room is standalone (HORN/CTRL ROOM) or doesn't require parent
+            // Room is standalone (HORN/CTRL ROOM) or doesn't require parent - NO DURATION
             HardwareCommandQueue::create([
-                'command_type' => 'test_speaker',
+                'command_type' => 'activate_speaker',
                 'payload' => [
                     'hardware_address' => $room->hardware_address,
                     'room_id' => $room->id,
                     'room_name' => $room->room_name,
-                    'duration_seconds' => $duration,
+                    'trigger_type' => 'MANUAL_STANDALONE',
                     // Keep speaker_zone for backward compatibility
                     'zone' => $room->speakerZone?->modbus_channel,
                     'zone_id' => $room->speakerZone?->id,
@@ -341,7 +338,7 @@ class HardwareController extends Controller
             ]);
             $commandsCreated++;
 
-            $message = "Test room {$room->room_name} ({$room->group_name}) selama {$duration} detik telah dijadwalkan";
+            $message = "Speaker {$room->room_name} ({$room->group_name}) diaktifkan (tetap aktif sampai dimatikan manual)";
         }
 
         if ($request->expectsJson()) {
@@ -447,17 +444,16 @@ class HardwareController extends Controller
         $parents = $rooms->filter(fn($room) => $room->isParent());
         $children = $rooms->filter(fn($room) => $room->requiresParent());
 
-        // If testing parent types (HORN or CTRLROOM), just activate them
+        // If testing parent types (HORN or CTRLROOM), just activate them - NO DURATION
         if ($parents->isNotEmpty()) {
             foreach ($parents as $parent) {
                 HardwareCommandQueue::create([
-                    'command_type' => 'activate_parent',
+                    'command_type' => 'activate_speaker',
                     'payload' => [
                         'hardware_address' => $parent->hardware_address,
                         'room_id' => $parent->id,
                         'room_name' => $parent->room_name,
-                        'duration_seconds' => $duration,
-                        'trigger_type' => 'TEST_TYPE',
+                        'trigger_type' => 'MANUAL_TYPE_PARENT',
                     ],
                     'status' => 'pending',
                     'scheduled_at' => $now,
@@ -465,7 +461,7 @@ class HardwareController extends Controller
                 ]);
             }
 
-            $message = "Test tipe {$validated['room_type']} ({$parents->count()} parent rooms) selama {$duration} detik telah dijadwalkan";
+            $message = "Speaker {$validated['room_type']} ({$parents->count()} parent) diaktifkan (tetap aktif sampai dimatikan manual)";
 
             if ($request->expectsJson()) {
                 return response()->json([
@@ -479,7 +475,7 @@ class HardwareController extends Controller
             return redirect()->back()->with('success', $message);
         }
 
-        // If testing child types, activate their parents first, then children
+        // If testing child types, activate their parents first, then children - NO DURATION
         if ($children->isNotEmpty()) {
             // Get unique parents for these children
             $parentAddresses = $children->pluck('parent_hardware_address')->unique()->filter();
@@ -488,12 +484,12 @@ class HardwareController extends Controller
             // Step 1: Activate parents
             foreach ($parentRooms as $parent) {
                 HardwareCommandQueue::create([
-                    'command_type' => 'activate_parent',
+                    'command_type' => 'activate_speaker',
                     'payload' => [
                         'hardware_address' => $parent->hardware_address,
                         'room_id' => $parent->id,
                         'room_name' => $parent->room_name,
-                        'trigger_type' => 'TEST_TYPE_PARENT',
+                        'trigger_type' => 'MANUAL_TYPE_PARENT',
                         'for_room_type' => $validated['room_type'],
                     ],
                     'status' => 'pending',
@@ -502,18 +498,17 @@ class HardwareController extends Controller
                 ]);
             }
 
-            // Step 2: Activate children (2 second delay)
+            // Step 2: Activate children (2 second delay) - NO DURATION
             $childActivationTime = $now->copy()->addSeconds(2);
             foreach ($children as $child) {
                 HardwareCommandQueue::create([
-                    'command_type' => 'test_speaker',
+                    'command_type' => 'activate_speaker',
                     'payload' => [
                         'hardware_address' => $child->hardware_address,
                         'room_id' => $child->id,
                         'room_name' => $child->room_name,
                         'parent_address' => $child->parent_hardware_address,
-                        'duration_seconds' => $duration,
-                        'trigger_type' => 'TEST_TYPE_CHILD',
+                        'trigger_type' => 'MANUAL_TYPE_CHILD',
                     ],
                     'status' => 'pending',
                     'scheduled_at' => $childActivationTime,
@@ -521,7 +516,7 @@ class HardwareController extends Controller
                 ]);
             }
 
-            $message = "Test tipe {$validated['room_type']}: {$parentRooms->count()} parent(s) + {$children->count()} child room(s) selama {$duration} detik telah dijadwalkan";
+            $message = "Speaker tipe {$validated['room_type']}: {$parentRooms->count()} parent(s) + {$children->count()} room(s) diaktifkan (tetap aktif sampai dimatikan manual)";
 
             if ($request->expectsJson()) {
                 return response()->json([
@@ -558,44 +553,83 @@ class HardwareController extends Controller
 
     /**
      * Turn off all speakers (OFF ALL - matikan PARENT + semua grup)
+     * Urutan: Children OFF dulu → Parents OFF
      */
     public function offAll(Request $request)
     {
         // Clear all pending commands
         $pendingDeleted = HardwareCommandQueue::pending()->delete();
+        $commandsCreated = 0;
 
-        // Get all zones from active rooms (including PARENT channels)
-        $rooms = Room::with('speakerZone')
-            ->active()
-            ->whereNotNull('speaker_zone_id')
+        // Get all active rooms with hardware_address
+        $allRooms = Room::active()
+            ->whereNotNull('hardware_address')
             ->get();
 
-        $zones = $rooms->pluck('speakerZone.modbus_channel')->unique()->values()->toArray();
+        if ($allRooms->isEmpty()) {
+            $message = "Tidak ada room aktif. {$pendingDeleted} perintah pending dibatalkan.";
+            if ($request->expectsJson()) {
+                return response()->json(['success' => true, 'message' => $message, 'pending_deleted' => $pendingDeleted]);
+            }
+            return redirect()->back()->with('success', $message);
+        }
 
-        if (!empty($zones)) {
+        // Separate parents and children
+        $parents = $allRooms->filter(fn($room) => $room->isParent());
+        $children = $allRooms->filter(fn($room) => $room->requiresParent());
+
+        // STEP 1: Deactivate all children FIRST (reverse order)
+        foreach ($children as $child) {
             HardwareCommandQueue::create([
-                'command_type' => 'stop_all',
+                'command_type' => 'deactivate_speaker',
                 'payload' => [
-                    'zones' => $zones,
-                    'action' => 'stop',
-                    'trigger_type' => 'OFF_ALL',
-                    'room_count' => $rooms->count(),
+                    'hardware_address' => $child->hardware_address,
+                    'room_id' => $child->id,
+                    'room_name' => $child->room_name,
+                    'trigger_type' => 'MANUAL_OFF_ALL_CHILD',
                 ],
                 'status' => 'pending',
                 'scheduled_at' => now(),
-                'expires_at' => now()->addMinutes(1),
+                'expires_at' => now()->addMinutes(5),
             ]);
+            $commandsCreated++;
         }
 
-        $message = "OFF ALL: Semua speaker dimatikan (" . $rooms->count() . " rooms, " . count($zones) . " zones). {$pendingDeleted} perintah pending dibatalkan.";
+        // STEP 2: Deactivate parents AFTER children (1 second delay)
+        $parentOffTime = now()->addSecond();
+        foreach ($parents as $parent) {
+            HardwareCommandQueue::create([
+                'command_type' => 'deactivate_speaker',
+                'payload' => [
+                    'hardware_address' => $parent->hardware_address,
+                    'room_id' => $parent->id,
+                    'room_name' => $parent->room_name,
+                    'trigger_type' => 'MANUAL_OFF_ALL_PARENT',
+                ],
+                'status' => 'pending',
+                'scheduled_at' => $parentOffTime,
+                'expires_at' => now()->addMinutes(5),
+            ]);
+            $commandsCreated++;
+        }
+
+        $message = sprintf(
+            'OFF ALL: %d children + %d parents (total %d rooms) dimatikan. %d perintah pending dibatalkan.',
+            $children->count(),
+            $parents->count(),
+            $allRooms->count(),
+            $pendingDeleted
+        );
 
         if ($request->expectsJson()) {
             return response()->json([
                 'success' => true,
                 'message' => $message,
                 'pending_deleted' => $pendingDeleted,
-                'zones_count' => count($zones),
-                'room_count' => $rooms->count()
+                'commands_created' => $commandsCreated,
+                'children_count' => $children->count(),
+                'parents_count' => $parents->count(),
+                'total_rooms' => $allRooms->count()
             ]);
         }
 
