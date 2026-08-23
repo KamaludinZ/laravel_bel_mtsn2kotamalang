@@ -1684,10 +1684,16 @@
         }
 
         function triggerOnAll() {
-            // Activate all buttons with light effect
+            // Activate HORN and CTRL ROOM buttons
             toggleLightEffect('btn-horn', true);
             toggleLightEffect('btn-ctrlroom', true);
             toggleLightEffect('btn-on-all', true);
+
+            // Activate all room buttons in the grid
+            const allRoomButtons = document.querySelectorAll('[id^="btn-room-"]');
+            allRoomButtons.forEach(button => {
+                toggleLightEffect(button.id, true);
+            });
 
             // Send request to activate all
             fetch('{{ route("hardware.test-all-zones") }}', {
@@ -1711,8 +1717,15 @@
         }
 
         function triggerOffAll() {
-            // Deactivate all buttons (remove light effects)
-            deactivateAllButtons();
+            // Deactivate HORN and CTRL ROOM buttons
+            toggleLightEffect('btn-horn', false);
+            toggleLightEffect('btn-ctrlroom', false);
+
+            // Deactivate all room buttons in the grid
+            const allRoomButtons = document.querySelectorAll('[id^="btn-room-"]');
+            allRoomButtons.forEach(button => {
+                toggleLightEffect(button.id, false);
+            });
 
             // Add temporary effect to OFF ALL button
             toggleLightEffect('btn-off-all', true);
