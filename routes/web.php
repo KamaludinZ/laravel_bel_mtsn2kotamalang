@@ -32,6 +32,51 @@ Route::get('/test-dashboard', function() {
     ]);
 })->middleware(['auth']);
 
+// Debug route - test database and models
+Route::get('/debug', function() {
+    try {
+        $data = [
+            'status' => 'OK',
+            'laravel_version' => app()->version(),
+            'php_version' => PHP_VERSION,
+            'database_connected' => false,
+            'tables_exist' => [],
+            'models_count' => [],
+        ];
+
+        // Test database connection
+        try {
+            \DB::connection()->getPdo();
+            $data['database_connected'] = true;
+        } catch (\Exception $e) {
+            $data['database_error'] = $e->getMessage();
+        }
+
+        // Check if tables exist
+        $tables = ['bell_types', 'audio_libraries', 'bell_schedules', 'settings', 'users'];
+        foreach ($tables as $table) {
+            $data['tables_exist'][$table] = \Schema::hasTable($table);
+        }
+
+        // Try to count records
+        if ($data['tables_exist']['bell_types']) {
+            $data['models_count']['bell_types'] = \App\Models\BellType::count();
+        }
+        if ($data['tables_exist']['audio_libraries']) {
+            $data['models_count']['audio_libraries'] = \App\Models\AudioLibrary::count();
+        }
+
+        return response()->json($data);
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+            'trace' => $e->getTraceAsString(),
+        ], 500);
+    }
+});
+
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
