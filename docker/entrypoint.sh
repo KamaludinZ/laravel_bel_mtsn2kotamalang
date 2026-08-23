@@ -69,6 +69,12 @@ if [ "${CONTAINER_ROLE:-app}" = "app" ]; then
     php artisan config:clear || echo "⚠️  Config clear failed"
     php artisan route:clear || echo "⚠️  Route clear failed"
     php artisan view:clear || echo "⚠️  View clear failed"
+    php artisan cache:clear || echo "⚠️  Cache clear failed"
+    php artisan event:clear || echo "⚠️  Event clear failed"
+
+    # Clear bootstrap cache files manually
+    echo "🗑️  Clearing bootstrap cache files..."
+    rm -f bootstrap/cache/*.php || echo "⚠️  Bootstrap cache clear failed"
 
     echo "📝 Caching configuration..."
     if php artisan config:cache; then
