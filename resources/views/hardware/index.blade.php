@@ -969,6 +969,111 @@
                                         </div>
                                     </details>
 
+                                    <!-- Command Types Reference -->
+                                    <details class="mb-4 bg-white dark:bg-gray-800 rounded-lg border border-orange-200 dark:border-orange-700">
+                                        <summary class="cursor-pointer p-4 font-semibold text-orange-800 dark:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/30 transition">
+                                            📋 Command Types yang Harus Dihandle Python Bridge
+                                        </summary>
+                                        <div class="p-4 border-t border-orange-200 dark:border-orange-700 space-y-3">
+                                            <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded p-3">
+                                                <h6 class="font-semibold text-blue-800 dark:text-blue-300 mb-2">1. activate_speaker (Manual ON - Tanpa Durasi)</h6>
+                                                <p class="text-sm text-blue-700 dark:text-blue-400 mb-2">
+                                                    <strong>Kapan:</strong> User klik tombol room/HORN/CTRLROOM/ON ALL di UI
+                                                </p>
+                                                <p class="text-sm text-blue-700 dark:text-blue-400 mb-2">
+                                                    <strong>Behavior:</strong> Nyalakan relay TANPA timeout, tetap aktif sampai deactivate manual
+                                                </p>
+                                                <div class="bg-gray-800 text-green-400 p-2 rounded font-mono text-xs mt-2">
+                                                    <div>def handle_activate_speaker(payload):</div>
+                                                    <div>    hardware_address = payload['hardware_address']</div>
+                                                    <div>    activate_relay(hardware_address)  # Nyalakan relay</div>
+                                                    <div>    # NO auto-off timer!</div>
+                                                </div>
+                                            </div>
+
+                                            <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded p-3">
+                                                <h6 class="font-semibold text-red-800 dark:text-red-300 mb-2">2. deactivate_speaker (Manual OFF)</h6>
+                                                <p class="text-sm text-red-700 dark:text-red-400 mb-2">
+                                                    <strong>Kapan:</strong> User klik tombol OFF ALL di UI
+                                                </p>
+                                                <p class="text-sm text-red-700 dark:text-red-400 mb-2">
+                                                    <strong>Behavior:</strong> Matikan relay immediately
+                                                </p>
+                                                <div class="bg-gray-800 text-green-400 p-2 rounded font-mono text-xs mt-2">
+                                                    <div>def handle_deactivate_speaker(payload):</div>
+                                                    <div>    hardware_address = payload['hardware_address']</div>
+                                                    <div>    deactivate_relay(hardware_address)  # Matikan relay</div>
+                                                </div>
+                                            </div>
+
+                                            <div class="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 rounded p-3">
+                                                <h6 class="font-semibold text-purple-800 dark:text-purple-300 mb-2">3. test_speaker (Bell Schedule - DENGAN Durasi)</h6>
+                                                <p class="text-sm text-purple-700 dark:text-purple-400 mb-2">
+                                                    <strong>Kapan:</strong> Jadwal bel otomatis (cron)
+                                                </p>
+                                                <p class="text-sm text-purple-700 dark:text-purple-400 mb-2">
+                                                    <strong>Behavior:</strong> Nyalakan relay DENGAN timeout, auto-off setelah durasi
+                                                </p>
+                                                <div class="bg-gray-800 text-green-400 p-2 rounded font-mono text-xs mt-2">
+                                                    <div>def handle_test_speaker(payload):</div>
+                                                    <div>    hardware_address = payload['hardware_address']</div>
+                                                    <div>    duration = payload.get('duration_seconds', 5)</div>
+                                                    <div>    activate_relay(hardware_address)</div>
+                                                    <div>    time.sleep(duration)  # Auto-off setelah durasi</div>
+                                                    <div>    deactivate_relay(hardware_address)</div>
+                                                </div>
+                                            </div>
+
+                                            <div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded p-3">
+                                                <h6 class="font-semibold text-green-800 dark:text-green-300 mb-2">4. activate_parent (Legacy - Backward Compatibility)</h6>
+                                                <p class="text-sm text-green-700 dark:text-green-400 mb-2">
+                                                    <strong>Kapan:</strong> Bell schedule untuk parent activation
+                                                </p>
+                                                <p class="text-sm text-green-700 dark:text-green-400 mb-2">
+                                                    <strong>Behavior:</strong> Sama seperti activate_speaker
+                                                </p>
+                                            </div>
+
+                                            <div class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded p-3">
+                                                <h6 class="font-semibold text-yellow-800 dark:text-yellow-300 mb-2">5. stop_speaker (Bell Schedule Auto-OFF)</h6>
+                                                <p class="text-sm text-yellow-700 dark:text-yellow-400 mb-2">
+                                                    <strong>Kapan:</strong> Setelah jadwal bel selesai (auto-off)
+                                                </p>
+                                                <p class="text-sm text-yellow-700 dark:text-yellow-400 mb-2">
+                                                    <strong>Behavior:</strong> Sama seperti deactivate_speaker
+                                                </p>
+                                            </div>
+
+                                            <div class="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-700 rounded p-3">
+                                                <h6 class="font-semibold text-indigo-800 dark:text-indigo-300 mb-2">6. play_audio (Play Audio File)</h6>
+                                                <p class="text-sm text-indigo-700 dark:text-indigo-400 mb-2">
+                                                    <strong>Kapan:</strong> Jadwal bel memutar audio
+                                                </p>
+                                                <p class="text-sm text-indigo-700 dark:text-indigo-400 mb-2">
+                                                    <strong>Behavior:</strong> Play audio file via audio output
+                                                </p>
+                                                <div class="bg-gray-800 text-green-400 p-2 rounded font-mono text-xs mt-2">
+                                                    <div>def handle_play_audio(payload):</div>
+                                                    <div>    audio_file = payload['audio_file']</div>
+                                                    <div>    play_sound(audio_file)  # Contoh: pygame.mixer</div>
+                                                </div>
+                                            </div>
+
+                                            <div class="bg-gray-100 dark:bg-gray-700 rounded p-3 mt-3">
+                                                <p class="text-xs text-gray-700 dark:text-gray-300">
+                                                    <strong>💡 Catatan Penting:</strong>
+                                                </p>
+                                                <ul class="list-disc list-inside text-xs text-gray-600 dark:text-gray-400 space-y-1 ml-2 mt-1">
+                                                    <li><strong>activate_speaker</strong> = TANPA timeout (untuk manual control mic/pengumuman)</li>
+                                                    <li><strong>deactivate_speaker</strong> = OFF manual (user klik OFF ALL)</li>
+                                                    <li><strong>test_speaker</strong> = DENGAN timeout (untuk bell schedule otomatis)</li>
+                                                    <li>Parent-child sequence: Parent dulu (+0s), Child kemudian (+1-2s)</li>
+                                                    <li>OFF sequence: Children dulu (+0s), Parents kemudian (+1s)</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </details>
+
                                     <!-- Final Notes -->
                                     <div class="mt-6 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-700 rounded-lg p-4">
                                         <h5 class="font-semibold text-green-800 dark:text-green-300 mb-2">🎉 Selesai!</h5>
@@ -976,7 +1081,7 @@
                                             Setelah bridge berjalan, status di dashboard akan berubah menjadi <strong>"Online"</strong>
                                         </p>
                                         <p class="text-sm text-green-700 dark:text-green-400">
-                                            Anda sudah bisa melakukan test speaker dari tab "Zone Control" →
+                                            Bridge harus bisa handle 6 command types di atas untuk sistem berfungsi optimal. Lihat dokumentasi lengkap di COMMAND_TYPES_UPDATE.md
                                         </p>
                                     </div>
                                 </div>
