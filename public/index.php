@@ -1,8 +1,4 @@
 <?php
-// TEMPORARY: Force error display to catch any early PHP errors
-ini_set('display_errors', '1');
-ini_set('display_startup_errors', '1');
-error_reporting(E_ALL);
 
 use Illuminate\Foundation\Application;
 use Illuminate\Http\Request;
@@ -21,17 +17,4 @@ require __DIR__.'/../vendor/autoload.php';
 /** @var Application $app */
 $app = require_once __DIR__.'/../bootstrap/app.php';
 
-// TEMPORARY DEBUG: Catch and display errors
-try {
-    $app->handleRequest(Request::capture());
-} catch (Throwable $e) {
-    // Show detailed error in production for debugging
-    http_response_code(500);
-    echo "<h1>Application Error</h1>";
-    echo "<p><strong>Message:</strong> " . htmlspecialchars($e->getMessage()) . "</p>";
-    echo "<p><strong>File:</strong> " . htmlspecialchars($e->getFile()) . ":" . $e->getLine() . "</p>";
-    echo "<p><strong>Exception:</strong> " . htmlspecialchars(get_class($e)) . "</p>";
-    echo "<h2>Stack Trace:</h2>";
-    echo "<pre>" . htmlspecialchars($e->getTraceAsString()) . "</pre>";
-    exit(1);
-}
+$app->handleRequest(Request::capture());
