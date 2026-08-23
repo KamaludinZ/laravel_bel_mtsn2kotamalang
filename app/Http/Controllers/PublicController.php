@@ -17,11 +17,25 @@ class PublicController extends Controller
      */
     public function index()
     {
-        $bellTypes = BellType::orderBy('is_active', 'desc')->orderBy('name')->get();
-        $activeBellType = BellType::where('is_active', true)->first();
-        $audioLibraries = \App\Models\AudioLibrary::orderBy('title')->get();
+        try {
+            $bellTypes = BellType::orderBy('is_active', 'desc')->orderBy('name')->get();
+            $activeBellType = BellType::where('is_active', true)->first();
+            $audioLibraries = \App\Models\AudioLibrary::orderBy('title')->get();
 
-        return view('public.index', compact('bellTypes', 'activeBellType', 'audioLibraries'));
+            return view('public.index', compact('bellTypes', 'activeBellType', 'audioLibraries'));
+        } catch (\Exception $e) {
+            // Log error and show user-friendly message
+            \Log::error('PublicController index error: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+
+            // Return simple error view or JSON for debugging
+            return response()->json([
+                'error' => 'Application error',
+                'message' => config('app.debug') ? $e->getMessage() : 'An error occurred while loading the page',
+                'file' => config('app.debug') ? $e->getFile() : null,
+                'line' => config('app.debug') ? $e->getLine() : null,
+            ], 500);
+        }
     }
 
     /**
