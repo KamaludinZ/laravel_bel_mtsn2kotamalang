@@ -138,9 +138,9 @@ class CheckHardwareMigrations extends Command
     protected function seedTable(string $table): void
     {
         $seederMap = [
-            'speaker_zones' => 'SpeakerZoneSeeder',
+            'speaker_zones' => 'HardwareSeeder', // HardwareSeeder seeds both speaker_zones and hardware_configs
             'rooms' => 'RoomSeeder',
-            'hardware_configs' => 'HardwareConfigSeeder',
+            'hardware_configs' => 'HardwareSeeder',
         ];
 
         if (!isset($seederMap[$table])) {
