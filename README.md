@@ -86,3 +86,60 @@ Aplikasi menggunakan Vite untuk bundling assets:
 - Otomatis versioned untuk cache control
 
 Lihat `VITE_GUIDE.md` untuk detail lengkap.
+
+---
+
+## 🚀 Production Deployment & Python Bridge
+
+**Server Production:** https://bell.mtsn2kotamalang.sch.id
+
+### 📚 Complete Documentation
+
+- **[DEPLOYMENT_README.md](DEPLOYMENT_README.md)** - Master index untuk semua dokumentasi
+- **[COOLIFY_DEPLOYMENT_GUIDE.md](COOLIFY_DEPLOYMENT_GUIDE.md)** - Auto-deploy dengan Coolify (Recommended)
+- **[DEPLOYMENT_PRODUCTION.md](DEPLOYMENT_PRODUCTION.md)** - Manual deployment guide
+- **[PYTHON_BRIDGE_SETUP_PRODUCTION.md](PYTHON_BRIDGE_SETUP_PRODUCTION.md)** - Setup PC lokal bell
+- **[SETUP_CHECKLIST_MTSN2.md](SETUP_CHECKLIST_MTSN2.md)** - Quick setup checklist
+- **[TROUBLESHOOTING_API.md](TROUBLESHOOTING_API.md)** - Debug API connection issues
+
+### 🎯 Quick Start
+
+**Deploy to Production (Coolify):**
+```bash
+git push origin main
+# Auto-deploy dengan migrations otomatis!
+```
+
+**Setup Python Bridge (PC Lokal Bell):**
+```cmd
+cd C:\BelSekolahBridge
+python test_api_connection.py  # Test API
+python python_bridge.py         # Run bridge
+```
+
+**Configuration:**
+- COM Port: COM5
+- Python: 3.14
+- OS: Windows 11
+- API Token: Configured in `.env`
+
+### 🔧 Hardware System
+
+**Auto-Migration Features:**
+- ✅ Automatic database migrations on deploy
+- ✅ Smart seeding (speaker zones, rooms, hardware config)
+- ✅ Health check endpoint
+- ✅ API for Python Bridge communication
+
+**Test API Connection:**
+```cmd
+python test_api_connection.py
+```
+
+**Hardware Control:**
+- 8 Modbus RS485 channels
+- Real-time speaker control
+- Command queue system
+- Execution logging
+
+---
