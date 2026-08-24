@@ -1,7 +1,7 @@
 {
   "vps_base_url": "https://bell.mtsn2kotamalang.sch.id",
   "api_token": "a46eac0b1a4bd1ebfa03607b4960c8cb98892038c9518a60b9b5d354e699e8de",
-  "com_port": "COM3",
+  "com_port": "COM5",
   "poll_interval": 2,
   "baud_rate": 9600,
   "timeout": 1
