@@ -14,6 +14,11 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Trust proxies for HTTPS detection behind reverse proxy (Coolify)
         $middleware->trustProxies(at: '*');
+
+        // Register custom middleware aliases
+        $middleware->alias([
+            'hardware.auth' => \App\Http\Middleware\HardwareBridgeAuth::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

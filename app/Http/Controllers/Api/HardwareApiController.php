@@ -13,26 +13,6 @@ use Illuminate\Support\Facades\Log;
 class HardwareApiController extends Controller
 {
     /**
-     * Middleware untuk autentikasi API token
-     */
-    public function __construct()
-    {
-        $this->middleware(function ($request, $next) {
-            $token = $request->bearerToken();
-            $expectedToken = env('HARDWARE_BRIDGE_API_TOKEN');
-
-            if (!$token || $token !== $expectedToken) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Unauthorized'
-                ], 401);
-            }
-
-            return $next($request);
-        });
-    }
-
-    /**
      * Get pending commands for bridge to execute
      *
      * Bridge akan poll endpoint ini setiap 5 detik

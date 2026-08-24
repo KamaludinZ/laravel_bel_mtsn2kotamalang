@@ -58,7 +58,7 @@ Route::get('/health', function () {
 });
 
 // Hardware Bridge API (secured with Bearer token)
-Route::prefix('hardware')->group(function () {
+Route::prefix('hardware')->middleware('hardware.auth')->group(function () {
     Route::get('/pending-commands', [HardwareApiController::class, 'getPendingCommands']);
     Route::post('/report-result', [HardwareApiController::class, 'reportResult']);
     Route::get('/config', [HardwareApiController::class, 'getConfig']);
