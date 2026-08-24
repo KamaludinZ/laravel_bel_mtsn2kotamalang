@@ -196,38 +196,51 @@ class BridgeClient:
 
             if response.status_code == 200:
                 data = response.json()
+
+                if not data.get('success', False):
+                    logger.warning(f"Server returned success=false: {data.get('message')}")
+                    return []
+
                 commands = data.get('commands', [])
 
                 if commands:
                     logger.info(f"Received {len(commands)} pending command(s)")
 
                 return commands
+            elif response.status_code == 401:
+                logger.error("Unauthorized - check API token in config.json")
+                return []
             else:
-                logger.warning(f"Failed to fetch commands: {response.status_code}")
+                logger.warning(f"Failed to fetch commands: HTTP {response.status_code}")
+                logger.warning(f"Response: {response.text[:200]}")
                 return []
 
         except Exception as e:
             logger.error(f"Error fetching commands: {e}")
             return []
 
-    def report_result(self, queue_id: int, success: bool, message: str, response_data: Optional[Dict] = None):
+    def report_result(self, command_id: str, success: bool, message: str, execution_time_ms: Optional[int] = None, response_data: Optional[Dict] = None):
         """Report command execution result to server"""
         try:
             url = f"{self.base_url}/api/hardware/report-result"
             payload = {
-                'queue_id': queue_id,
+                'command_id': command_id,
                 'success': success,
                 'message': message,
-                'executed_at': datetime.now().isoformat(),
+                'execution_time_ms': execution_time_ms,
+                'bridge_version': '1.0.0',
                 'response_data': response_data or {}
             }
 
             response = self.session.post(url, json=payload, timeout=10)
 
             if response.status_code == 200:
-                logger.info(f"✓ Result reported for queue_id={queue_id}")
+                logger.info(f"✓ Result reported for command_id={command_id}")
+            elif response.status_code == 401:
+                logger.error("Unauthorized - check API token")
             else:
-                logger.warning(f"Failed to report result: {response.status_code}")
+                logger.warning(f"Failed to report result: HTTP {response.status_code}")
+                logger.warning(f"Response: {response.text[:200]}")
 
         except Exception as e:
             logger.error(f"Error reporting result: {e}")
@@ -306,24 +319,34 @@ class PythonBridge:
 
     def process_command(self, command: Dict):
         """Process a single command"""
-        queue_id = command['id']
-        command_type = command['command']
-        hardware_address = command['hardware_address']
-        room_name = command.get('room_name', 'Unknown')
+        command_id = command['id']
+        command_type = command['command_type']
+        payload = command.get('payload', {})
 
-        logger.info(f"Processing command #{queue_id}: {command_type} for {room_name} (address {hardware_address})")
+        # Extract zone info from payload
+        zone_id = payload.get('zone_id')
+        zone_address = payload.get('zone_address', 1)
+        action = payload.get('action', 'ON')
+
+        logger.info(f"Processing command {command_id}: {command_type} - {action} (zone {zone_id}, address {zone_address})")
+
+        # Measure execution time
+        start_time = time.time()
 
         # Send to Modbus
         result = self.modbus.send_command(
-            address=hardware_address,
-            command=command_type
+            address=zone_address,
+            command=action
         )
+
+        execution_time_ms = int((time.time() - start_time) * 1000)
 
         # Report result to server
         self.client.report_result(
-            queue_id=queue_id,
+            command_id=command_id,
             success=result['success'],
             message=result['message'],
+            execution_time_ms=execution_time_ms,
             response_data=result
         )
 
