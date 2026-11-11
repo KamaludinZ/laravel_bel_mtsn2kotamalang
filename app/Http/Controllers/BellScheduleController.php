@@ -163,8 +163,14 @@ class BellScheduleController extends Controller
             $successCount = $import->getSuccessCount();
             $errors = $import->getErrors();
 
+            $duplicates = $import->getDuplicates();
+
             // Build feedback message
             $message = "Import selesai: {$successCount} jadwal berhasil ditambahkan.";
+
+            if (!empty($duplicates)) {
+                $message .= " " . count($duplicates) . " jadwal dilewati karena hari dan jam yang sama sudah ada.";
+            }
 
             if (!empty($errors)) {
                 $errorCount = count($errors);
@@ -187,6 +193,11 @@ class BellScheduleController extends Controller
                     return back()
                         ->with('error', $message . "\n\nDetail error:\n" . $errorDetails);
                 }
+            }
+
+            if (!empty($duplicates)) {
+                return redirect()->route('bell-schedules.index')
+                    ->with('warning', $message . "\n\nContoh:\n" . implode("\n", array_slice($duplicates, 0, 5)));
             }
 
             return redirect()->route('bell-schedules.index')

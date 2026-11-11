@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Http;
+use App\Services\DatabaseBackupService;
 use Symfony\Component\Process\Process;
 
 class SettingController extends Controller
@@ -655,65 +656,27 @@ class SettingController extends Controller
     }
 
     /**
-     * Backup database to SQL file
+     * Backup database to JSON file (tanpa pg_dump/mysqldump)
      */
     private function backupDatabase($timestamp)
     {
-        $dbConnection = config('database.default');
-        $dbConfig = config("database.connections.{$dbConnection}");
-
         $backupPath = storage_path('app/backups');
-        $filename = "database_{$timestamp}.sql";
+        $filename = "database_{$timestamp}.json";
         $filepath = "{$backupPath}/{$filename}";
 
-        if ($dbConfig['driver'] === 'pgsql') {
-            // PostgreSQL backup
-            $command = sprintf(
-                'pg_dump -h %s -p %s -U %s -d %s > %s',
-                escapeshellarg($dbConfig['host']),
-                escapeshellarg($dbConfig['port']),
-                escapeshellarg($dbConfig['username']),
-                escapeshellarg($dbConfig['database']),
-                escapeshellarg($filepath)
-            );
+        $data = app(DatabaseBackupService::class)->export();
+        $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
 
-            // Set PGPASSWORD environment variable
-            putenv("PGPASSWORD=" . $dbConfig['password']);
-
-            exec($command . ' 2>&1', $output, $returnCode);
-
-            putenv("PGPASSWORD");
-
-            if ($returnCode !== 0) {
-                throw new \Exception("PostgreSQL backup failed: " . implode("\n", $output));
-            }
-
-        } elseif ($dbConfig['driver'] === 'mysql') {
-            // MySQL backup
-            $command = sprintf(
-                'mysqldump -h %s -P %s -u %s -p%s %s > %s',
-                escapeshellarg($dbConfig['host']),
-                escapeshellarg($dbConfig['port'] ?? 3306),
-                escapeshellarg($dbConfig['username']),
-                escapeshellarg($dbConfig['password']),
-                escapeshellarg($dbConfig['database']),
-                escapeshellarg($filepath)
-            );
-
-            exec($command . ' 2>&1', $output, $returnCode);
-
-            if ($returnCode !== 0) {
-                throw new \Exception("MySQL backup failed: " . implode("\n", $output));
-            }
-        } else {
-            throw new \Exception("Database driver {$dbConfig['driver']} not supported for backup");
+        if ($json === false || File::put($filepath, $json) === false) {
+            throw new \Exception('Gagal menulis file backup database');
         }
 
+        $rowCount = array_sum(array_map('count', $data['tables']));
         $size = $this->formatBytes(filesize($filepath));
         return [
             'success' => true,
             'file' => $filename,
-            'message' => "Database backup created: {$filename} ({$size})"
+            'message' => "Database backup created: {$filename} ({$size}, " . count($data['tables']) . " tabel, {$rowCount} baris)"
         ];
     }
 
@@ -816,7 +779,7 @@ class SettingController extends Controller
         ]);
 
         try {
-            $filename = $request->backup_file;
+            $filename = basename($request->backup_file);
             $filepath = storage_path('app/backups/' . $filename);
 
             if (!File::exists($filepath)) {
@@ -828,7 +791,22 @@ class SettingController extends Controller
 
             Log::info("Starting restore for file: {$filename} (extension: {$extension})");
 
-            // Restore database if .sql file
+            // Restore database if .json file (format backup baru)
+            if ($extension === 'json') {
+                Log::info("Restoring database from JSON file: {$filename}");
+                $backup = json_decode(File::get($filepath), true);
+                if (!is_array($backup)) {
+                    throw new \Exception('File JSON rusak atau tidak dapat dibaca: ' . json_last_error_msg());
+                }
+                $counts = app(DatabaseBackupService::class)->restore($backup);
+                $logs[] = '✅ Database berhasil di-restore dari: ' . $filename;
+                foreach ($counts as $table => $count) {
+                    $logs[] = "• {$table}: {$count} baris";
+                }
+                Log::info("Database restore completed successfully", $counts);
+            }
+
+            // Restore database if .sql file (format backup lama)
             if ($extension === 'sql') {
                 Log::info("Restoring database from SQL file: {$filename}");
                 $restoreDb = $this->restoreDatabase($filepath);
@@ -846,7 +824,7 @@ class SettingController extends Controller
 
             // If no restore was performed
             if (empty($logs)) {
-                throw new \Exception("Format file tidak didukung. Hanya file .sql dan .zip yang dapat di-restore. File Anda: .{$extension}");
+                throw new \Exception("Format file tidak didukung. Hanya file .json, .sql dan .zip yang dapat di-restore. File Anda: .{$extension}");
             }
 
             // Clear caches after restore
@@ -880,14 +858,20 @@ class SettingController extends Controller
         Log::info("Database restore config - Driver: {$dbConfig['driver']}, Host: {$dbConfig['host']}, Database: {$dbConfig['database']}");
 
         if ($dbConfig['driver'] === 'pgsql') {
-            // PostgreSQL restore
+            // Dump pg_dump tidak berisi DROP TABLE, sehingga restore ke database
+            // yang sudah berisi data gagal diam-diam (tabel "already exists",
+            // COPY "duplicate key"). Buat file sementara yang menghapus tabel
+            // lama dulu, lalu jalankan dalam satu transaksi dan berhenti saat
+            // error, sehingga jika gagal semua perubahan dibatalkan.
+            $tempFile = $this->preparePgsqlRestoreFile($filepath);
+
             $command = sprintf(
-                'psql -h %s -p %s -U %s -d %s < %s',
+                'psql -v ON_ERROR_STOP=1 --single-transaction -h %s -p %s -U %s -d %s -f %s',
                 escapeshellarg($dbConfig['host']),
                 escapeshellarg($dbConfig['port']),
                 escapeshellarg($dbConfig['username']),
                 escapeshellarg($dbConfig['database']),
-                escapeshellarg($filepath)
+                escapeshellarg($tempFile)
             );
 
             Log::info("Executing PostgreSQL restore command");
@@ -895,6 +879,7 @@ class SettingController extends Controller
             putenv("PGPASSWORD=" . $dbConfig['password']);
             exec($command . ' 2>&1', $output, $returnCode);
             putenv("PGPASSWORD");
+            File::delete($tempFile);
 
             Log::info("PostgreSQL restore output: " . implode("\n", $output));
             Log::info("PostgreSQL restore return code: " . $returnCode);
@@ -943,6 +928,39 @@ class SettingController extends Controller
     }
 
     /**
+     * Siapkan salinan dump PostgreSQL yang aman di-restore ke database berisi data:
+     * tambahkan DROP untuk setiap tabel/sequence yang dibuat dump, dan buang
+     * perintah yang tidak dikenal server/psql versi lama.
+     */
+    private function preparePgsqlRestoreFile($filepath)
+    {
+        $content = File::get($filepath);
+
+        preg_match_all('/^CREATE TABLE ([\w."]+) \(/m', $content, $tables);
+        preg_match_all('/^CREATE SEQUENCE ([\w."]+)/m', $content, $sequences);
+
+        if (empty($tables[1])) {
+            throw new \Exception('File SQL tidak berisi definisi tabel (CREATE TABLE). Pastikan file adalah backup database yang valid.');
+        }
+
+        $drops = '';
+        foreach (array_unique($tables[1]) as $table) {
+            $drops .= "DROP TABLE IF EXISTS {$table} CASCADE;\n";
+        }
+        foreach (array_unique($sequences[1]) as $sequence) {
+            $drops .= "DROP SEQUENCE IF EXISTS {$sequence} CASCADE;\n";
+        }
+
+        // \restrict / \unrestrict (pg_dump 18) dan transaction_timeout (PostgreSQL 17+)
+        $content = preg_replace('/^(\\\\restrict|\\\\unrestrict|SET transaction_timeout).*$/m', '', $content);
+
+        $tempFile = storage_path('app/backups/.restore_' . uniqid() . '.sql');
+        File::put($tempFile, $drops . "\n" . $content);
+
+        return $tempFile;
+    }
+
+    /**
      * Restore files from ZIP
      */
     private function restoreFiles($filepath)
@@ -984,8 +1002,8 @@ class SettingController extends Controller
             $extension = strtolower($file->getClientOriginalExtension());
 
             // Validate extension
-            if (!in_array($extension, ['sql', 'zip'])) {
-                throw new \Exception('Format file tidak valid. Hanya file .sql dan .zip yang diperbolehkan.');
+            if (!in_array($extension, ['json', 'sql', 'zip'])) {
+                throw new \Exception('Format file tidak valid. Hanya file .json, .sql dan .zip yang diperbolehkan.');
             }
 
             $filename = $file->getClientOriginalName();

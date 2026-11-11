@@ -543,7 +543,7 @@
                         <div class="mb-8">
                             <h4 class="text-md font-semibold mb-3 text-gray-900 dark:text-gray-100">Upload File Backup untuk Restore</h4>
                             <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                                Upload file backup (.sql atau .zip) dari komputer Anda untuk di-restore ke aplikasi ini.
+                                Upload file backup (.json, .sql atau .zip) dari komputer Anda untuk di-restore ke aplikasi ini.
                             </p>
 
                             <form action="{{ route('settings.backup.upload') }}" method="POST" enctype="multipart/form-data" class="space-y-4">
@@ -553,10 +553,10 @@
                                     <label class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300">
                                         File Backup <span class="text-red-500">*</span>
                                     </label>
-                                    <input type="file" name="backup_file" accept=".sql,.zip" required
+                                    <input type="file" name="backup_file" accept=".json,.sql,.zip" required
                                         class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 dark:text-gray-400 focus:outline-none dark:bg-gray-700 dark:border-gray-600">
                                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                        Hanya file .sql (database) atau .zip (files). Max 100MB.
+                                        File .json (database, format baru), .sql (database, format lama) atau .zip (files). Max 100MB.
                                     </p>
                                 </div>
 

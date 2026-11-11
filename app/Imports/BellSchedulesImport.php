@@ -19,6 +19,8 @@ class BellSchedulesImport implements ToModel, WithHeadingRow, SkipsOnError, Skip
 
     protected $errors = [];
     protected $successCount = 0;
+    protected $duplicates = [];
+    protected $importedKeys = [];
 
     /**
     * @param array $row
@@ -168,6 +170,15 @@ class BellSchedulesImport implements ToModel, WithHeadingRow, SkipsOnError, Skip
                 return null;
             }
 
+            // Cegah jadwal ganda: hari + jam yang sama (di file ini maupun yang sudah ada di database)
+            $key = "{$englishDay}|{$waktu}";
+            if (isset($this->importedKeys[$key])
+                || BellSchedule::where('day', $englishDay)->where('time', "{$waktu}:00")->exists()) {
+                $this->duplicates[] = "Jadwal {$hari} jam {$waktu} sudah ada, dilewati";
+                return null;
+            }
+            $this->importedKeys[$key] = true;
+
             $this->successCount++;
 
             return new BellSchedule([
@@ -187,6 +198,11 @@ class BellSchedulesImport implements ToModel, WithHeadingRow, SkipsOnError, Skip
     public function getErrors()
     {
         return $this->errors;
+    }
+
+    public function getDuplicates()
+    {
+        return $this->duplicates;
     }
 
     public function getSuccessCount()
