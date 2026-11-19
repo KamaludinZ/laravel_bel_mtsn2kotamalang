@@ -1,5 +1,31 @@
 <x-layouts.public-layout>
-    <div x-data="{ ...bellSystem(), userMenuOpen: false }" x-init="init()" class="min-h-screen flex flex-col">
+    <div x-data="{ ...bellSystem(), userMenuOpen: false }" class="min-h-screen flex flex-col">
+        <!-- Overlay izin suara: browser memblokir audio otomatis sampai ada 1x interaksi -->
+        <div x-show="showSoundOverlay && isAutomatic" x-cloak style="display: none;"
+             class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 cursor-pointer"
+             role="button" tabindex="0" aria-label="Aktifkan suara bel">
+            <div class="max-w-md w-full bg-white rounded-2xl shadow-2xl p-6 text-center">
+                <div class="mx-auto mb-4 w-16 h-16 rounded-full bg-yellow-100 flex items-center justify-center">
+                    <svg class="w-9 h-9 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707A1 1 0 0112 5v14a1 1 0 01-1.707.707L5.586 15z"/>
+                    </svg>
+                </div>
+                <template x-if="pendingSchedule">
+                    <p class="text-lg font-bold text-red-600 mb-2">
+                        Bel "<span x-text="pendingSchedule.schedule.audio.title"></span>" tertahan oleh browser
+                    </p>
+                </template>
+                <h2 class="text-xl font-bold text-gray-900 mb-2">Klik di mana saja untuk mengaktifkan suara bel</h2>
+                <p class="text-sm text-gray-600 mb-4">
+                    Browser memblokir suara otomatis sebelum ada interaksi di halaman. Cukup 1x klik/sentuh,
+                    setelah itu bel akan berbunyi otomatis setiap pergantian jam selama halaman ini tetap terbuka.
+                </p>
+                <p class="text-xs text-gray-500">
+                    Agar tidak perlu klik setiap membuka halaman: izinkan <strong>Suara / Autoplay</strong> untuk situs ini
+                    di pengaturan situs browser (ikon gembok di address bar).
+                </p>
+            </div>
+        </div>
         <!-- Header -->
         <header class="bg-white/10 backdrop-blur-sm border-b border-white/20 py-6">
             <div class="container mx-auto px-4">
@@ -216,6 +242,11 @@
                                 Mode Otomatis
                             </span>
                         </p>
+                        <button type="button" x-show="isAutomatic" @click="unlockAudio()"
+                                class="mt-2 inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold"
+                                :class="audioUnlocked ? 'bg-green-500/30 text-green-100' : 'bg-red-500/40 text-red-100 animate-pulse'">
+                            <span x-text="audioUnlocked ? '🔊 Suara bel aktif' : '🔇 Suara belum aktif — klik untuk mengaktifkan'"></span>
+                        </button>
                     </div>
 
                     <!-- Bell Type Selector (Auth Only - Compact) -->
@@ -324,7 +355,7 @@
             </div>
 
             <!-- Hidden Audio Elements -->
-            <audio x-ref="audioPlayer" class="hidden"></audio>
+            <audio x-ref="audioPlayer" class="hidden" preload="auto" playsinline></audio>
             <audio x-ref="manualAudioPlayer" class="hidden"></audio>
             <audio x-ref="scheduleAudioPlayer" class="hidden"></audio>
         </main>
@@ -338,27 +369,42 @@
     </div>
 
     <script>
+        // 0,1 detik WAV hening untuk "membuka" izin audio browser (wajib di Safari/iOS).
+        const BELL_SILENT_WAV = 'data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==';
+        const BELL_PLAYED_STORAGE_KEY = 'bel_played_schedule_keys';
+
         function bellSystem() {
             return {
                 currentTime: '00:00:00',
                 currentDate: '',
                 schedules: [],
+                scheduleDate: null,
                 bellType: '-',
                 isAutomatic: false,
+                isFetchingSchedule: false,
                 currentPlayingSchedule: null,
                 clockInterval: null,
-                checkInterval: null,
+                tickWorker: null,
                 progressInterval: null,
                 manualAudioId: '',
                 isManualPlaying: false,
                 audioLibraries: @json($audioLibraries),
                 currentSchedulePlayingId: null,
-                lastTriggeredScheduleKey: null,
                 playedScheduleKeys: new Set(),
-                serverOffsetMs: 0,
+                // Selisih jam perangkat vs server (ms) dan offset zona waktu sekolah (menit).
+                // Nilai awal dari server saat halaman dirender, lalu disinkronkan berkala.
+                serverOffsetMs: {{ (int) now()->getPreciseTimestamp(3) }} - Date.now(),
+                tzOffsetMinutes: {{ (int) \Carbon\Carbon::now(config('app.bell_timezone', 'Asia/Jakarta'))->utcOffset() }},
                 serverSyncInterval: null,
                 scheduleRefreshInterval: null,
-                catchUpWindowSeconds: 90,
+                // Bel dianggap jatuh tempo 0..120 detik setelah jam jadwal. Cukup lebar
+                // untuk tab latar belakang yang timer-nya diperlambat browser (Chrome: 1x/menit).
+                triggerWindowSeconds: 120,
+                // Autoplay / izin suara
+                audioUnlocked: false,
+                showSoundOverlay: false,
+                pendingSchedule: null,
+                wakeLock: null,
                 // Progress tracking
                 playbackProgress: 0,
                 currentTimeFormatted: '00:00',
@@ -369,72 +415,121 @@
                 manualCurrentTimeFormatted: '00:00',
                 manualDurationFormatted: '00:00',
 
+                // Dipanggil otomatis oleh Alpine (jangan ditambah x-init="init()" agar tidak dobel)
                 init() {
+                    this.restorePlayedKeys();
                     this.updateClock();
                     this.fetchSchedule();
                     this.syncServerTime();
-
-                    // Update clock every second (based on server offset)
-                    this.clockInterval = setInterval(() => {
-                        this.updateClock();
-                    }, 1000);
-
-                    // Check for schedule every 5 seconds
-                    this.checkInterval = setInterval(() => {
-                        this.checkAndPlaySchedule();
-                    }, 5000);
+                    this.startTicker();
+                    this.setupAudioUnlock();
+                    this.requestWakeLock();
 
                     // Fetch schedule every 5 minutes
-                    this.scheduleRefreshInterval = setInterval(() => {
-                        this.fetchSchedule();
-                    }, 300000);
+                    this.scheduleRefreshInterval = setInterval(() => this.fetchSchedule(), 300000);
 
                     // Sync server time every 30 seconds
-                    this.serverSyncInterval = setInterval(() => {
-                        this.syncServerTime();
-                    }, 30000);
+                    this.serverSyncInterval = setInterval(() => this.syncServerTime(), 30000);
 
                     // Re-check quickly when tab/app comes back to foreground
+                    const resync = async () => {
+                        await this.syncServerTime();
+                        this.updateClock();
+                        this.checkAndPlaySchedule();
+                    };
                     document.addEventListener('visibilitychange', () => {
                         if (!document.hidden) {
-                            this.syncServerTime();
-                            this.checkAndPlaySchedule(true);
+                            this.requestWakeLock();
+                            resync();
                         }
                     });
-
-                    window.addEventListener('focus', () => {
-                        this.syncServerTime();
-                        this.checkAndPlaySchedule(true);
+                    window.addEventListener('focus', resync);
+                    window.addEventListener('pageshow', resync);
+                    window.addEventListener('online', () => {
+                        this.fetchSchedule();
+                        resync();
                     });
+                },
 
-                    window.addEventListener('pageshow', () => {
-                        this.syncServerTime();
-                        this.checkAndPlaySchedule(true);
-                    });
+                // ===== Ticker =====
+                // Timer di dalam Web Worker tidak diperlambat seagresif setInterval biasa
+                // saat tab di latar belakang. setInterval tetap dipasang sebagai cadangan.
+                startTicker() {
+                    const onTick = () => {
+                        this.updateClock();
+                        this.checkAndPlaySchedule();
+                    };
+
+                    let workerStarted = false;
+                    try {
+                        if (window.Worker && window.Blob && window.URL) {
+                            const blob = new Blob(['setInterval(function(){postMessage(0);},1000);'], { type: 'text/javascript' });
+                            this.tickWorker = new Worker(URL.createObjectURL(blob));
+                            this.tickWorker.onmessage = onTick;
+                            workerStarted = true;
+                        }
+                    } catch (e) {
+                        this.tickWorker = null;
+                    }
+
+                    this.clockInterval = setInterval(onTick, workerStarted ? 5000 : 1000);
+                },
+
+                // ===== Waktu sekolah (tidak bergantung zona waktu perangkat) =====
+                // Mengembalikan Date yang field UTC-nya = jam dinding sekolah.
+                schoolNow() {
+                    return new Date(Date.now() + this.serverOffsetMs + this.tzOffsetMinutes * 60000);
+                },
+
+                schoolDateStr(d) {
+                    return d.toISOString().slice(0, 10); // YYYY-MM-DD (waktu sekolah)
+                },
+
+                schoolSecondsOfDay(d) {
+                    return d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds();
+                },
+
+                scheduleSecondsOfDay(schedule) {
+                    const parts = String(schedule.time_full || schedule.time || '00:00').split(':').map(Number);
+                    return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
                 },
 
                 updateClock() {
-                    const now = this.getServerNow();
-                    this.currentTime = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                    this.currentDate = now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-                },
-
-                getServerNow() {
-                    return new Date(Date.now() + this.serverOffsetMs);
+                    const now = this.schoolNow();
+                    try {
+                        this.currentTime = now.toLocaleTimeString('id-ID', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+                        this.currentDate = now.toLocaleDateString('id-ID', { timeZone: 'UTC', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                    } catch (e) {
+                        const p = n => String(n).padStart(2, '0');
+                        this.currentTime = `${p(now.getUTCHours())}:${p(now.getUTCMinutes())}:${p(now.getUTCSeconds())}`;
+                        this.currentDate = this.schoolDateStr(now);
+                    }
                 },
 
                 async syncServerTime() {
                     try {
                         const requestStart = Date.now();
-                        const response = await fetch('/api/current-time');
+                        const response = await fetch('/api/current-time', { cache: 'no-store', headers: { 'Accept': 'application/json' } });
+                        if (!response.ok) return;
                         const data = await response.json();
                         const requestEnd = Date.now();
+                        const rtt = requestEnd - requestStart;
 
-                        if (data.success && data.datetime) {
-                            const serverTimeMs = new Date(data.datetime).getTime();
-                            const networkLatencyHalf = Math.floor((requestEnd - requestStart) / 2);
-                            const estimatedServerNow = serverTimeMs + networkLatencyHalf;
-                            this.serverOffsetMs = estimatedServerNow - Date.now();
+                        if (!data.success) return;
+
+                        if (typeof data.utc_offset_minutes === 'number') {
+                            this.tzOffsetMinutes = data.utc_offset_minutes;
+                        }
+
+                        // Abaikan sampel dengan latensi sangat besar (estimasi tidak akurat)
+                        if (rtt > 10000) return;
+
+                        const serverTimeMs = typeof data.timestamp_ms === 'number'
+                            ? data.timestamp_ms
+                            : new Date(data.datetime).getTime();
+
+                        if (!isNaN(serverTimeMs)) {
+                            this.serverOffsetMs = serverTimeMs + Math.floor(rtt / 2) - requestEnd;
                         }
                     } catch (error) {
                         console.error('Error syncing server time:', error);
@@ -442,81 +537,257 @@
                 },
 
                 async fetchSchedule() {
+                    if (this.isFetchingSchedule) return;
+                    this.isFetchingSchedule = true;
                     try {
-                        const response = await fetch('/api/today-schedule');
+                        const response = await fetch('/api/today-schedule', { cache: 'no-store', headers: { 'Accept': 'application/json' } });
+                        if (!response.ok) throw new Error('HTTP ' + response.status);
                         const data = await response.json();
 
                         if (data.success) {
-                            this.schedules = data.data;
+                            this.schedules = Array.isArray(data.data) ? data.data : [];
                             this.bellType = data.bell_type || '-';
-                            this.isAutomatic = data.is_automatic || false;
+                            this.isAutomatic = !!data.is_automatic;
+                        } else {
+                            // Tidak ada jenis bel aktif
+                            this.schedules = [];
+                            this.bellType = '-';
+                            this.isAutomatic = false;
                         }
+                        this.scheduleDate = data.current_date || this.schoolDateStr(this.schoolNow());
                     } catch (error) {
                         console.error('Error fetching schedule:', error);
+                    } finally {
+                        this.isFetchingSchedule = false;
                     }
                 },
 
-                checkAndPlaySchedule(forceCatchUp = false) {
-                    if (!this.isAutomatic) return;
+                // ===== Penanda jadwal yang sudah diputar (dibagi antar tab & tahan reload) =====
+                readStoredPlayedKeys() {
+                    try {
+                        const raw = window.localStorage.getItem(BELL_PLAYED_STORAGE_KEY);
+                        const parsed = raw ? JSON.parse(raw) : {};
+                        return parsed && typeof parsed === 'object' ? parsed : {};
+                    } catch (e) {
+                        return {};
+                    }
+                },
 
-                    const now = this.getServerNow();
-                    const currentDateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
-
-                    this.schedules.forEach(schedule => {
-                        const [hours, minutes] = (schedule.time || '00:00').split(':').map(Number);
-                        const scheduleDateTime = new Date(now);
-                        scheduleDateTime.setHours(hours || 0, minutes || 0, 0, 0);
-
-                        const diffSeconds = Math.floor((now.getTime() - scheduleDateTime.getTime()) / 1000);
-                        const scheduleMinuteKey = `${currentDateStr}-${schedule.id}-${schedule.time}`;
-
-                        // batas trigger:
-                        // - normal interval: toleransi 0..5 detik
-                        // - force catch-up saat kembali fokus: toleransi 0..catchUpWindowSeconds
-                        const allowedWindow = forceCatchUp ? this.catchUpWindowSeconds : 5;
-                        const isWithinWindow = diffSeconds >= 0 && diffSeconds <= allowedWindow;
-
-                        if (
-                            isWithinWindow &&
-                            !this.playedScheduleKeys.has(scheduleMinuteKey) &&
-                            this.lastTriggeredScheduleKey !== scheduleMinuteKey &&
-                            !this.isSchedulePlaying(schedule.id) &&
-                            !(this.currentPlayingSchedule && this.currentPlayingSchedule.id === schedule.id)
-                        ) {
-                            this.lastTriggeredScheduleKey = scheduleMinuteKey;
-                            this.playedScheduleKeys.add(scheduleMinuteKey);
-                            this.playAudio(schedule);
+                restorePlayedKeys() {
+                    const today = this.schoolDateStr(this.schoolNow());
+                    const stored = this.readStoredPlayedKeys();
+                    const kept = {};
+                    Object.keys(stored).forEach(key => {
+                        if (stored[key] === today) {
+                            kept[key] = today;
+                            this.playedScheduleKeys.add(key);
                         }
                     });
+                    try { window.localStorage.setItem(BELL_PLAYED_STORAGE_KEY, JSON.stringify(kept)); } catch (e) {}
+                },
+
+                hasPlayed(key) {
+                    if (this.playedScheduleKeys.has(key)) return true;
+                    return Object.prototype.hasOwnProperty.call(this.readStoredPlayedKeys(), key);
+                },
+
+                markPlayed(key, dateStr) {
+                    this.playedScheduleKeys.add(key);
+                    try {
+                        const stored = this.readStoredPlayedKeys();
+                        stored[key] = dateStr;
+                        window.localStorage.setItem(BELL_PLAYED_STORAGE_KEY, JSON.stringify(stored));
+                    } catch (e) {}
+                },
+
+                checkAndPlaySchedule() {
+                    if (!this.isAutomatic || this.schedules.length === 0) return;
+
+                    const now = this.schoolNow();
+                    const currentDateStr = this.schoolDateStr(now);
+
+                    // Hari berganti: ambil jadwal hari baru dulu, jangan pakai jadwal kemarin
+                    if (this.scheduleDate !== currentDateStr) {
+                        this.fetchSchedule();
+                        return;
+                    }
+
+                    const nowSeconds = this.schoolSecondsOfDay(now);
+                    const dueSchedules = this.schedules.filter(schedule => {
+                        const diff = nowSeconds - this.scheduleSecondsOfDay(schedule);
+                        const key = `${currentDateStr}-${schedule.id}-${schedule.time}`;
+                        return diff >= 0 && diff <= this.triggerWindowSeconds && !this.hasPlayed(key);
+                    });
+
+                    if (dueSchedules.length === 0) return;
+
+                    // Tandai semua yang jatuh tempo, putar yang paling akhir saja (hindari tumpuk)
+                    dueSchedules.forEach(schedule => {
+                        this.markPlayed(`${currentDateStr}-${schedule.id}-${schedule.time}`, currentDateStr);
+                    });
+                    const latest = dueSchedules.reduce((a, b) =>
+                        this.scheduleSecondsOfDay(b) >= this.scheduleSecondsOfDay(a) ? b : a);
+
+                    this.playAudio(latest);
                 },
 
                 playAudio(schedule) {
-                    // ===== TRIGGER HARDWARE FIRST =====
+                    // ===== TRIGGER HARDWARE FIRST (server mencegah trigger ganda) =====
                     this.queueHardwareTrigger(schedule);
 
-                    // Then play browser audio as fallback
+                    // Then play browser audio
+                    this.playBrowserAudio(schedule);
+                },
+
+                playBrowserAudio(schedule) {
+                    if (!schedule || !schedule.audio || !schedule.audio.file_url) return;
+
                     this.currentPlayingSchedule = schedule;
                     this.currentSchedulePlayingId = schedule.id;
                     this.nowPlayingTitle = schedule.audio.title;
-                    const audio = this.$refs.audioPlayer;
-                    audio.src = schedule.audio.file_url;
 
-                    audio.play()
-                        .then(() => {
-                            console.log('Playing:', schedule.audio.title);
-                            this.startProgressTracking(audio, schedule.audio.duration);
-                        })
-                        .catch(error => {
-                            console.error('Error playing audio:', error);
-                            this.currentPlayingSchedule = null;
-                            this.currentSchedulePlayingId = null;
-                        });
+                    const audio = this.$refs.audioPlayer;
+                    audio.muted = false;
+                    audio.src = schedule.audio.file_url;
 
                     audio.onended = () => {
                         this.currentPlayingSchedule = null;
                         this.currentSchedulePlayingId = null;
                         this.stopProgressTracking();
                     };
+                    audio.onerror = () => {
+                        console.error('Gagal memuat file audio bel:', schedule.audio.file_url);
+                        this.currentPlayingSchedule = null;
+                        this.currentSchedulePlayingId = null;
+                        this.stopProgressTracking();
+                    };
+
+                    const playPromise = audio.play();
+                    if (!playPromise || typeof playPromise.then !== 'function') {
+                        this.startProgressTracking(audio, schedule.audio.duration);
+                        return;
+                    }
+
+                    playPromise
+                        .then(() => {
+                            console.log('Playing:', schedule.audio.title);
+                            this.audioUnlocked = true;
+                            this.showSoundOverlay = false;
+                            this.pendingSchedule = null;
+                            this.startProgressTracking(audio, schedule.audio.duration);
+                        })
+                        .catch(error => {
+                            this.currentPlayingSchedule = null;
+                            this.currentSchedulePlayingId = null;
+
+                            if (error && error.name === 'NotAllowedError') {
+                                // Diblokir kebijakan autoplay browser: minta 1 klik, lalu putar
+                                console.warn('Autoplay diblokir browser. Menunggu interaksi pengguna untuk memutar bel.');
+                                this.audioUnlocked = false;
+                                this.pendingSchedule = { schedule, queuedAt: Date.now() };
+                                this.showSoundOverlay = true;
+                            } else if (error && error.name !== 'AbortError') {
+                                console.error('Error playing audio:', error);
+                            }
+                        });
+                },
+
+                // ===== Izin autoplay =====
+                // Semua browser modern (Chrome, Edge, Firefox, Safari, browser Android/iOS)
+                // memblokir audio otomatis sebelum ada interaksi pengguna di halaman.
+                setupAudioUnlock() {
+                    try {
+                        if (navigator.getAutoplayPolicy && navigator.getAutoplayPolicy('mediaelement') === 'allowed') {
+                            this.audioUnlocked = true;
+                        }
+                    } catch (e) {}
+
+                    this.showSoundOverlay = !this.audioUnlocked;
+
+                    const handler = () => this.unlockAudio();
+                    ['pointerdown', 'touchend', 'click', 'keydown'].forEach(evt => {
+                        document.addEventListener(evt, handler, { capture: true, passive: true });
+                    });
+
+                    if (!this.audioUnlocked) this.probeAutoplay();
+                },
+
+                // Coba putar audio hening TANPA klik. Berhasil = browser sudah mengizinkan
+                // autoplay (kebijakan/flag/izin situs), jadi overlay tidak perlu tampil.
+                // Chrome/Edge belum punya navigator.getAutoplayPolicy, jadi dideteksi begini.
+                probeAutoplay() {
+                    const audio = this.$refs.audioPlayer;
+                    if (!audio || !audio.paused) return;
+                    try {
+                        audio.src = BELL_SILENT_WAV;
+                        const p = audio.play();
+                        if (!p || typeof p.then !== 'function') return;
+                        p.then(() => {
+                            if (audio.src === BELL_SILENT_WAV) {
+                                audio.pause();
+                                audio.removeAttribute('src');
+                                try { audio.load(); } catch (e) {}
+                            }
+                            this.audioUnlocked = true;
+                            this.showSoundOverlay = false;
+                            console.log('Autoplay diizinkan browser: bel berjalan tanpa perlu klik.');
+                        }).catch(() => {
+                            if (audio.src === BELL_SILENT_WAV) audio.removeAttribute('src');
+                        });
+                    } catch (e) {}
+                },
+
+                unlockAudio() {
+                    const audio = this.$refs.audioPlayer;
+                    if (!audio) return;
+
+                    // Ada bel yang tertunda karena diblokir: putar langsung dalam gestur ini
+                    if (this.pendingSchedule) {
+                        const pending = this.pendingSchedule;
+                        this.pendingSchedule = null;
+                        if (Date.now() - pending.queuedAt <= 5 * 60 * 1000) {
+                            this.playBrowserAudio(pending.schedule);
+                            this.requestWakeLock();
+                            return;
+                        }
+                    }
+
+                    if (this.audioUnlocked) {
+                        this.showSoundOverlay = false;
+                        return;
+                    }
+
+                    // Jangan ganggu bel yang sedang berbunyi
+                    if (!audio.paused) return;
+
+                    audio.src = BELL_SILENT_WAV;
+                    const p = audio.play();
+                    const done = () => {
+                        audio.pause();
+                        audio.removeAttribute('src');
+                        try { audio.load(); } catch (e) {}
+                        this.audioUnlocked = true;
+                        this.showSoundOverlay = false;
+                    };
+
+                    if (p && typeof p.then === 'function') {
+                        p.then(done).catch(err => console.warn('Gagal membuka izin audio:', err));
+                    } else {
+                        done();
+                    }
+
+                    this.requestWakeLock();
+                },
+
+                // Cegah layar mati/tidur pada perangkat display bel (jika didukung browser)
+                async requestWakeLock() {
+                    try {
+                        if (!('wakeLock' in navigator) || this.wakeLock || document.visibilityState !== 'visible') return;
+                        this.wakeLock = await navigator.wakeLock.request('screen');
+                        this.wakeLock.addEventListener('release', () => { this.wakeLock = null; });
+                    } catch (e) {
+                        this.wakeLock = null;
+                    }
                 },
 
                 isCurrentSchedule(schedule) {
@@ -613,20 +884,16 @@
                 },
 
                 isSchedulePassed(schedule) {
-                    // Check if schedule time has passed
-                    const now = new Date();
-                    const currentTimeStr = now.toTimeString().slice(0, 5); // HH:MM
-
-                    // Compare times
-                    return schedule.time < currentTimeStr;
+                    void this.currentTime; // dependensi reaktif agar badge status ter-update tiap detik
+                    // Jam:menit jadwal sudah lewat (menurut waktu sekolah)
+                    const nowMinute = Math.floor(this.schoolSecondsOfDay(this.schoolNow()) / 60);
+                    return Math.floor(this.scheduleSecondsOfDay(schedule) / 60) < nowMinute;
                 },
 
                 isScheduleNow(schedule) {
-                    // Check if schedule time is exactly now
-                    const now = new Date();
-                    const currentTimeStr = now.toTimeString().slice(0, 5); // HH:MM
-
-                    return schedule.time === currentTimeStr;
+                    void this.currentTime;
+                    const nowMinute = Math.floor(this.schoolSecondsOfDay(this.schoolNow()) / 60);
+                    return Math.floor(this.scheduleSecondsOfDay(schedule) / 60) === nowMinute;
                 },
 
                 // Progress tracking methods

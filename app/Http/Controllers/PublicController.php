@@ -9,9 +9,20 @@ use App\Models\Setting;
 use App\Models\SpeakerZone;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class PublicController extends Controller
 {
+    /**
+     * Waktu "sekarang" menurut zona waktu sekolah (default Asia/Jakarta).
+     * config('app.timezone') masih UTC, jadi jangan pakai Carbon::now() polos
+     * untuk menentukan hari/jam bel.
+     */
+    private function schoolNow(): Carbon
+    {
+        return Carbon::now(config('app.bell_timezone', 'Asia/Jakarta'));
+    }
+
     /**
      * Display the public bell display page.
      */
@@ -74,8 +85,9 @@ class PublicController extends Controller
             ]);
         }
 
-        // Get current day in English (lowercase)
-        $today = strtolower(Carbon::now()->format('l')); // monday, tuesday, etc.
+        // Get current day in English (lowercase) - menurut zona waktu sekolah
+        $now = $this->schoolNow();
+        $today = strtolower($now->format('l')); // monday, tuesday, etc.
 
         // Check if today is in the active days
         if (!in_array($today, $activeBellType->active_days ?? [])) {
@@ -94,6 +106,8 @@ class PublicController extends Controller
             ->where('day', $today)
             ->orderBy('time')
             ->get()
+            ->filter(fn ($schedule) => $schedule->audioLibrary !== null)
+            ->values()
             ->map(function ($schedule) {
                 return [
                     'id' => $schedule->id,
@@ -115,8 +129,8 @@ class PublicController extends Controller
             'message' => 'Jadwal berhasil diambil',
             'bell_type' => $activeBellType->name,
             'is_automatic' => $activeBellType->is_automatic,
-            'current_time' => Carbon::now()->format('H:i:s'),
-            'current_date' => Carbon::now()->format('Y-m-d'),
+            'current_time' => $now->format('H:i:s'),
+            'current_date' => $now->format('Y-m-d'),
             'day' => $today,
             'data' => $schedules
         ]);
@@ -127,12 +141,19 @@ class PublicController extends Controller
      */
     public function getCurrentTime()
     {
+        $now = $this->schoolNow();
+
         return response()->json([
             'success' => true,
-            'time' => Carbon::now()->format('H:i:s'),
-            'date' => Carbon::now()->format('Y-m-d'),
-            'datetime' => Carbon::now()->toIso8601String(),
-        ]);
+            'time' => $now->format('H:i:s'),
+            'date' => $now->format('Y-m-d'),
+            'datetime' => $now->toIso8601String(),
+            // Epoch ms + offset zona waktu sekolah: browser menghitung jam bel
+            // dari sini sehingga tidak bergantung pada zona waktu perangkat.
+            'timestamp_ms' => (int) $now->getPreciseTimestamp(3),
+            'utc_offset_minutes' => $now->utcOffset(),
+            'timezone' => $now->getTimezone()->getName(),
+        ])->header('Cache-Control', 'no-store, no-cache, must-revalidate');
     }
 
     /**
@@ -145,7 +166,32 @@ class PublicController extends Controller
             'audio_duration' => 'nullable|integer',
         ]);
 
-        $schedule = BellSchedule::with('audioLibrary')->findOrFail($validated['schedule_id']);
+        $schedule = BellSchedule::with(['audioLibrary', 'bellType'])->findOrFail($validated['schedule_id']);
+
+        // Endpoint ini publik (tanpa CSRF), jadi hanya terima jadwal yang memang
+        // sedang jatuh tempo: jenis bel aktif + otomatis, hari ini, 0..5 menit lalu.
+        $now = $this->schoolNow();
+        $scheduleAt = $now->copy()->setTimeFromTimeString(date('H:i:s', strtotime($schedule->time)));
+        $secondsSince = $scheduleAt->diffInSeconds($now, false);
+
+        $isDue = $schedule->bellType
+            && $schedule->bellType->is_active
+            && $schedule->bellType->is_automatic
+            && $schedule->day === strtolower($now->format('l'))
+            && $secondsSince >= 0
+            && $secondsSince <= 300;
+
+        if (!$isDue || !$schedule->audioLibrary) {
+            return response()->json(['success' => false, 'message' => 'Jadwal tidak sedang jatuh tempo'], 422);
+        }
+
+        // Banyak browser/tab bisa membuka halaman ini sekaligus. Pastikan hardware
+        // hanya di-trigger SEKALI per jadwal per hari.
+        $lockKey = 'bell-hw-trigger:' . $schedule->id . ':' . $now->format('Y-m-d');
+        if (!Cache::add($lockKey, true, now()->addMinutes(10))) {
+            return response()->json(['success' => true, 'duplicate' => true]);
+        }
+
         $this->triggerHardware($schedule, $validated['audio_duration'] ?? null);
 
         return response()->json(['success' => true]);

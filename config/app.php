@@ -75,6 +75,12 @@ return [
     'timezone' => 'UTC',
 
     /*
+    | Zona waktu sekolah untuk penentuan hari & jam bel. Sengaja dipisah dari
+    | 'timezone' agar timestamp database lama (tersimpan dalam UTC) tidak bergeser.
+    */
+    'bell_timezone' => env('BELL_TIMEZONE', 'Asia/Jakarta'),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration
     |--------------------------------------------------------------------------
