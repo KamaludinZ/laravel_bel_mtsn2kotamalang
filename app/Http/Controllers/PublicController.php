@@ -7,9 +7,9 @@ use App\Models\BellType;
 use App\Models\HardwareCommandQueue;
 use App\Models\Setting;
 use App\Models\SpeakerZone;
+use App\Services\BellHardwareGate;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 
 class PublicController extends Controller
 {
@@ -168,16 +168,13 @@ class PublicController extends Controller
 
         $schedule = BellSchedule::with(['audioLibrary', 'bellType'])->findOrFail($validated['schedule_id']);
 
-        // Endpoint ini publik (tanpa CSRF), jadi hanya terima jadwal yang memang
-        // sedang jatuh tempo: jenis bel aktif + otomatis, hari ini, 0..5 menit lalu.
-        $now = $this->schoolNow();
+        // Endpoint ini publik, jadi hanya terima jadwal yang memang sedang jatuh tempo:
+        // jenis bel aktif + otomatis + hari aktif, dan 0..5 menit setelah jam jadwal.
+        $now = BellHardwareGate::now();
         $scheduleAt = $now->copy()->setTimeFromTimeString(date('H:i:s', strtotime($schedule->time)));
         $secondsSince = $scheduleAt->diffInSeconds($now, false);
 
-        $isDue = $schedule->bellType
-            && $schedule->bellType->is_active
-            && $schedule->bellType->is_automatic
-            && $schedule->day === strtolower($now->format('l'))
+        $isDue = BellHardwareGate::isScheduleActiveToday($schedule, $now)
             && $secondsSince >= 0
             && $secondsSince <= 300;
 
@@ -185,13 +182,18 @@ class PublicController extends Controller
             return response()->json(['success' => false, 'message' => 'Jadwal tidak sedang jatuh tempo'], 422);
         }
 
-        // Banyak browser/tab bisa membuka halaman ini sekaligus. Pastikan hardware
-        // hanya di-trigger SEKALI per jadwal per hari.
-        $lockKey = 'bell-hw-trigger:' . $schedule->id . ':' . $now->format('Y-m-d');
-        if (!Cache::add($lockKey, true, now()->addMinutes(10))) {
+        // Scheduler server adalah jalur utama bel hardware. Browser hanya cadangan
+        // ketika scheduler tidak berjalan, agar hardware tidak dipicu dua kali.
+        if (BellHardwareGate::schedulerAlive()) {
+            return response()->json(['success' => true, 'handled_by' => 'scheduler']);
+        }
+
+        // Banyak browser/tab bisa membuka halaman ini sekaligus: hanya SEKALI per jadwal per hari.
+        if (!BellHardwareGate::claim($schedule, $now)) {
             return response()->json(['success' => true, 'duplicate' => true]);
         }
 
+        \Log::warning("Scheduler tidak aktif - bel hardware dipicu dari browser (cadangan) untuk jadwal {$schedule->id}");
         $this->triggerHardware($schedule, $validated['audio_duration'] ?? null);
 
         return response()->json(['success' => true]);

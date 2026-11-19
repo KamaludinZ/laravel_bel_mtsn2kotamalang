@@ -25,24 +25,24 @@ class AppServiceProvider extends ServiceProvider
             URL::forceScheme('https');
         }
 
-        // Share app settings to all views
+        // Share app settings to all views.
+        // Composer '*' terpanggil untuk SETIAP view & komponen Blade, jadi nilainya
+        // dihitung sekali per request (once) dan diambil dari cache setting.
         view()->composer('*', function ($view) {
-            try {
-                // Check if settings table exists before querying
-                if (\Schema::hasTable('settings')) {
-                    $view->with('appName', \App\Models\Setting::get('app_name', config('app.name')));
-                    $view->with('appLogo', \App\Models\Setting::get('app_logo'));
-                } else {
-                    // Table doesn't exist yet, use defaults
-                    $view->with('appName', config('app.name', 'Bel Sekolah'));
-                    $view->with('appLogo', null);
+            $shared = once(function () {
+                try {
+                    return [
+                        'appName' => \App\Models\Setting::get('app_name', config('app.name', 'Bel Sekolah')),
+                        'appLogo' => \App\Models\Setting::get('app_logo'),
+                    ];
+                } catch (\Throwable $e) {
+                    // Tabel belum ada (instalasi baru) / database bermasalah
+                    \Log::warning('AppServiceProvider view composer error: ' . $e->getMessage());
+                    return ['appName' => config('app.name', 'Bel Sekolah'), 'appLogo' => null];
                 }
-            } catch (\Throwable $e) {
-                // Fallback if any error occurs
-                \Log::warning('AppServiceProvider view composer error: ' . $e->getMessage());
-                $view->with('appName', config('app.name', 'Bel Sekolah'));
-                $view->with('appLogo', null);
-            }
+            });
+
+            $view->with($shared);
         });
     }
 }

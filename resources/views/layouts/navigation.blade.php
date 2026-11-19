@@ -7,8 +7,8 @@
                 <div class="shrink-0 flex items-center">
                     <a href="{{ route('dashboard') }}" class="flex items-center gap-3">
                         @php
-                            $appLogo = \App\Models\Setting::where('key', 'app_logo')->value('value');
-                            $appName = \App\Models\Setting::where('key', 'app_name')->value('value') ?? config('app.name');
+                            $appLogo = $appLogo ?? null;
+                            $appName = $appName ?? config('app.name');
                         @endphp
                         @if($appLogo)
                             <img src="{{ asset('storage/' . $appLogo) }}" alt="Logo" class="h-9 w-auto">

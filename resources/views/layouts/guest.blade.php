@@ -9,7 +9,7 @@
 
         <!-- Favicon -->
         @php
-            $appLogo = \App\Models\Setting::where('key', 'app_logo')->value('value');
+            $appLogo = $appLogo ?? null;
         @endphp
         @if($appLogo)
             <link rel="icon" type="image/png" href="{{ asset('storage/' . $appLogo) }}">
@@ -29,8 +29,8 @@
             <div class="mb-8">
                 <a href="/" class="flex flex-col items-center gap-3">
                     @php
-                        $appLogo = \App\Models\Setting::where('key', 'app_logo')->value('value');
-                        $appName = \App\Models\Setting::where('key', 'app_name')->value('value');
+                        $appLogo = $appLogo ?? null;
+                        $appName = $appName ?? null;
                     @endphp
                     @if($appLogo)
                         <img src="{{ asset('storage/' . $appLogo) }}" alt="Logo" class="h-20 w-auto">

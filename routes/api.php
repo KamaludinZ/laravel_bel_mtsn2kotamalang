@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Api\HardwareApiController;
+use App\Http\Controllers\HealthController;
+use App\Http\Controllers\PublicController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -13,49 +15,16 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-// Health Check Endpoint (for Docker healthcheck and monitoring)
-Route::get('/health', function () {
-    $services = [];
-    $healthy = true;
+// Health Check Endpoint (Docker healthcheck, Coolify & monitoring)
+Route::get('/health', HealthController::class)->name('api.health');
 
-    try {
-        // Check database connection
-        try {
-            \DB::connection()->getPdo();
-            $services['database'] = 'connected';
-        } catch (\Exception $e) {
-            $services['database'] = 'error: ' . $e->getMessage();
-            $healthy = false;
-        }
-
-        // Check Redis connection (if using Redis)
-        try {
-            if (config('cache.default') === 'redis') {
-                \Cache::driver('redis')->get('health_check');
-                $services['cache'] = 'connected';
-            } else {
-                $services['cache'] = 'not_configured';
-            }
-        } catch (\Exception $e) {
-            $services['cache'] = 'error: ' . $e->getMessage();
-            // Don't mark as unhealthy if cache fails - app can still work
-        }
-
-        $services['app'] = 'running';
-
-        return response()->json([
-            'status' => $healthy ? 'healthy' : 'unhealthy',
-            'timestamp' => now()->toIso8601String(),
-            'services' => $services
-        ], $healthy ? 200 : 503);
-    } catch (\Exception $e) {
-        return response()->json([
-            'status' => 'unhealthy',
-            'error' => $e->getMessage(),
-            'timestamp' => now()->toIso8601String()
-        ], 503);
-    }
-});
+// Endpoint polling halaman bel publik. Sengaja di grup API (stateless):
+// tiap layar bel melakukan polling berkala, jadi jangan membuat/menulis sesi.
+Route::get('/today-schedule', [PublicController::class, 'getTodaySchedule'])->name('api.today-schedule');
+Route::get('/current-time', [PublicController::class, 'getCurrentTime'])->name('api.current-time');
+Route::post('/queue-hardware-trigger', [PublicController::class, 'queueHardwareTrigger'])
+    ->middleware('throttle:30,1')
+    ->name('api.queue-hardware-trigger');
 
 // Hardware Bridge API (secured with Bearer token)
 Route::prefix('hardware')->middleware('hardware.auth')->group(function () {

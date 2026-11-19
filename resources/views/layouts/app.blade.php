@@ -9,7 +9,7 @@
 
         <!-- Favicon -->
         @php
-            $appLogo = \App\Models\Setting::where('key', 'app_logo')->value('value');
+            $appLogo = $appLogo ?? null;
         @endphp
         @if($appLogo)
             <link rel="icon" type="image/png" href="{{ asset('storage/' . $appLogo) }}">

@@ -6,6 +6,7 @@ use App\Models\AudioLibrary;
 use App\Models\BellSchedule;
 use App\Models\HardwareCommandQueue;
 use App\Models\Room;
+use App\Services\BellHardwareGate;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 
@@ -30,20 +31,29 @@ class CheckBellSchedule extends Command
      */
     public function handle()
     {
-        $now = Carbon::now('Asia/Jakarta');
+        // Jam sekolah (WIB). Waktu yang DISIMPAN ke database memakai now() (zona
+        // aplikasi) agar tidak terjadi selisih zona waktu antar bagian aplikasi.
+        $now = BellHardwareGate::now();
         $currentDay = strtolower($now->englishDayOfWeek); // monday, tuesday, etc
         $currentTime = $now->format('H:i'); // HH:MM format
 
-        $this->info("Checking bell schedules for {$currentDay} at {$currentTime}...");
+        $this->info("Checking bell schedules for {$currentDay} at {$currentTime} WIB...");
 
-        // Find schedules that should ring now
+        // Find schedules that should ring now - hanya jenis bel yang AKTIF & OTOMATIS
         $schedules = BellSchedule::with(['bellType', 'audioLibrary'])
             ->where('day', $currentDay)
-            ->where('time', $currentTime)
-            ->get();
+            ->whereBetween('time', [$currentTime . ':00', $currentTime . ':59'])
+            ->whereHas('bellType', fn ($q) => $q->where('is_active', true)->where('is_automatic', true))
+            ->get()
+            ->filter(fn ($schedule) => BellHardwareGate::isScheduleActiveToday($schedule, $now));
 
         if ($schedules->isEmpty()) {
             $this->info('No bell schedules for current time.');
+            return Command::SUCCESS;
+        }
+
+        if (!BellHardwareGate::hardwareEnabled()) {
+            $this->info('Integrasi hardware dinonaktifkan di Pengaturan - bel hanya diputar di browser.');
             return Command::SUCCESS;
         }
 
@@ -51,14 +61,9 @@ class CheckBellSchedule extends Command
             try {
                 $this->info("Processing: {$schedule->bellType->name} - {$schedule->audioLibrary->title}");
 
-                // Check if already processed in the last minute (avoid duplicate triggers)
-                $recentCommand = HardwareCommandQueue::where('created_at', '>=', $now->copy()->subMinute())
-                    ->where('command_type', 'play_audio')
-                    ->whereJsonContains('payload->schedule_id', $schedule->id)
-                    ->first();
-
-                if ($recentCommand) {
-                    $this->warn("  → Already triggered recently, skipping");
+                // Satu trigger per jadwal per hari (kunci yang sama dengan jalur browser)
+                if (!BellHardwareGate::claim($schedule, $now)) {
+                    $this->warn("  → Already triggered, skipping");
                     continue;
                 }
 
@@ -69,8 +74,10 @@ class CheckBellSchedule extends Command
                     continue;
                 }
 
-                // Calculate audio duration (use stored duration or default 60 seconds)
-                $audioDuration = $audio->duration_seconds ?? 60;
+                // Durasi audio dari kolom `duration` (dulu salah baca `duration_seconds`
+                // yang tidak ada, sehingga speaker selalu mati setelah 60 detik)
+                $audioDuration = (int) ($audio->duration ?: 60);
+                $start = now();
 
                 // Get all active rooms with hardware_address
                 $allRooms = Room::active()
@@ -101,15 +108,15 @@ class CheckBellSchedule extends Command
                             'step' => '1a_ON_PARENT',
                         ],
                         'status' => 'pending',
-                        'scheduled_at' => $now,
-                        'expires_at' => $now->copy()->addMinutes(5),
+                        'scheduled_at' => $start,
+                        'expires_at' => $start->copy()->addMinutes(5),
                     ]);
                 }
 
                 $this->info("  → Step 1a: {$parents->count()} PARENT(s) activation queued");
 
                 // Step 1b: Activate CHILDREN after parents (2 second delay)
-                $childActivationTime = $now->copy()->addSeconds(2);
+                $childActivationTime = $start->copy()->addSeconds(2);
                 foreach ($children as $child) {
                     HardwareCommandQueue::create([
                         'command_type' => 'test_speaker',
@@ -125,14 +132,14 @@ class CheckBellSchedule extends Command
                         ],
                         'status' => 'pending',
                         'scheduled_at' => $childActivationTime,
-                        'expires_at' => $now->copy()->addMinutes(5),
+                        'expires_at' => $start->copy()->addMinutes(5),
                     ]);
                 }
 
                 $this->info("  → Step 1b: {$children->count()} CHILD(ren) activation queued (at {$childActivationTime->format('H:i:s')})");
 
                 // Step 2: Play Audio - After children activation (4 seconds total from start)
-                $playTime = $now->copy()->addSeconds(4);
+                $playTime = $start->copy()->addSeconds(4);
                 $playCommand = HardwareCommandQueue::create([
                     'command_type' => 'play_audio',
                     'payload' => [

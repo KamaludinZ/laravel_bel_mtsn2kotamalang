@@ -60,6 +60,15 @@ class HardwareConfig extends Model
      */
     public function updateStatus(string $status): void
     {
+        // Bridge melakukan polling tiap ~2 detik. Hindari menulis ke database setiap
+        // polling: cukup perbarui jika status berubah atau data sudah > 20 detik.
+        // (Batas "online" adalah 2 menit, jadi presisi 20 detik lebih dari cukup.)
+        if ($this->last_status === $status
+            && $this->last_connected_at
+            && $this->last_connected_at->diffInSeconds(now(), true) < 20) {
+            return;
+        }
+
         $this->update([
             'last_status' => $status,
             'last_connected_at' => now(),

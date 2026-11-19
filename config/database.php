@@ -96,6 +96,8 @@ return [
             'prefix' => '',
             'prefix_indexes' => true,
             'search_path' => 'public',
+            // Sesi PostgreSQL ikut WIB agar CURRENT_TIMESTAMP/now() di SQL konsisten dengan aplikasi
+            'timezone' => env('DB_TIMEZONE', env('APP_TIMEZONE', 'Asia/Jakarta')),
             'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
 

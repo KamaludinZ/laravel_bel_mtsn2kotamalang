@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'hardware_bridge' => [
+        'token' => env('HARDWARE_BRIDGE_API_TOKEN'),
+    ],
+
 ];

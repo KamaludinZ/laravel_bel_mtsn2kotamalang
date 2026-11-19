@@ -66,19 +66,18 @@ return [
     | Application Timezone
     |--------------------------------------------------------------------------
     |
-    | Here you may specify the default timezone for your application, which
-    | will be used by the PHP date and date-time functions. The timezone
-    | is set to "UTC" by default as it is suitable for most use cases.
+    | Seluruh aplikasi memakai WIB (Asia/Jakarta): tanggal & jam di database,
+    | log, jadwal bel, scheduler, dan tampilan. Data lama yang tersimpan dalam UTC
+    | dikonversi oleh migrasi 2026_11_19_000000_convert_timestamps_to_wib.
     |
     */
 
-    'timezone' => 'UTC',
+    'timezone' => env('APP_TIMEZONE', 'Asia/Jakarta'),
 
     /*
-    | Zona waktu sekolah untuk penentuan hari & jam bel. Sengaja dipisah dari
-    | 'timezone' agar timestamp database lama (tersimpan dalam UTC) tidak bergeser.
+    | Zona waktu penentuan hari & jam bel (default sama dengan zona aplikasi).
     */
-    'bell_timezone' => env('BELL_TIMEZONE', 'Asia/Jakarta'),
+    'bell_timezone' => env('BELL_TIMEZONE', env('APP_TIMEZONE', 'Asia/Jakarta')),
 
     /*
     |--------------------------------------------------------------------------

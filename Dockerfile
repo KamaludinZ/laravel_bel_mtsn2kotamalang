@@ -3,6 +3,7 @@ FROM php:8.3-fpm-alpine AS base
 
 # Install system dependencies
 RUN apk add --no-cache \
+    tzdata \
     postgresql-dev \
     postgresql-client \
     zip \
@@ -50,6 +51,9 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 ENV COMPOSER_ALLOW_SUPERUSER=1
 ENV COMPOSER_NO_INTERACTION=1
 ENV COMPOSER_MEMORY_LIMIT=-1
+
+# Zona waktu sistem WIB (log nginx/supervisor, perintah `date`)
+ENV TZ=Asia/Jakarta
 
 # Set working directory
 WORKDIR /var/www/html
@@ -102,9 +106,11 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # Expose port
 EXPOSE 80
 
-# Health check - try static file first, then Laravel endpoint
-HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
-    CMD curl -f http://localhost/health.html || curl -f http://localhost/api/health || exit 1
+# Health check sesuai peran container (app: Laravel+DB, queue: worker, scheduler: heartbeat)
+COPY docker/healthcheck.sh /usr/local/bin/healthcheck.sh
+RUN sed -i 's/\r$//' /usr/local/bin/healthcheck.sh && chmod +x /usr/local/bin/healthcheck.sh
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+    CMD /usr/local/bin/healthcheck.sh
 
 # Set entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

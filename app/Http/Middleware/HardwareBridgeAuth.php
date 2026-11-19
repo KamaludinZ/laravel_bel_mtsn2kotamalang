@@ -15,10 +15,12 @@ class HardwareBridgeAuth
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $token = $request->bearerToken();
-        $expectedToken = env('HARDWARE_BRIDGE_API_TOKEN');
+        $token = (string) $request->bearerToken();
+        // Lewat config, bukan env(): setelah `php artisan config:cache` (dipakai di
+        // production) env() di luar file config mengembalikan null.
+        $expectedToken = (string) config('services.hardware_bridge.token');
 
-        if (!$token || $token !== $expectedToken) {
+        if ($expectedToken === '' || $token === '' || !hash_equals($expectedToken, $token)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized - Invalid API Token'

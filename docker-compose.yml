@@ -8,11 +8,14 @@ services:
     image: postgres:16-alpine
     # Remove container_name to use default (project_postgres_1)
     restart: unless-stopped
+    # Zona waktu server database = WIB (berlaku juga untuk database yang sudah ada)
+    command: ["postgres", "-c", "timezone=Asia/Jakarta", "-c", "log_timezone=Asia/Jakarta"]
     environment:
       POSTGRES_DB: ${DB_DATABASE:-laravel_bel}
       POSTGRES_USER: ${DB_USERNAME:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
       PGDATA: /var/lib/postgresql/data/pgdata
+      TZ: Asia/Jakarta
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
@@ -64,6 +67,9 @@ services:
     environment:
       # App Configuration
       - CONTAINER_ROLE=app
+      # Seluruh aplikasi konsisten WIB (database, log, scheduler, tampilan)
+      - TZ=Asia/Jakarta
+      - APP_TIMEZONE=Asia/Jakarta
       - APP_NAME=${APP_NAME:-Laravel}
       - APP_ENV=${APP_ENV:-production}
       - APP_KEY=${APP_KEY}
@@ -85,6 +91,8 @@ services:
 
       # Cache & Session
       - CACHE_DRIVER=${CACHE_DRIVER:-redis}
+      - CACHE_STORE=${CACHE_STORE:-redis}
+      - HARDWARE_BRIDGE_API_TOKEN=${HARDWARE_BRIDGE_API_TOKEN:-}
       - SESSION_DRIVER=${SESSION_DRIVER:-redis}
       - QUEUE_CONNECTION=${QUEUE_CONNECTION:-redis}
 
@@ -100,10 +108,11 @@ services:
     networks:
       - app-network
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost/health.html || curl -f http://localhost/api/health || exit 1"]
+      # Cek sungguhan: nginx -> PHP-FPM -> Laravel -> database (bukan file statis health.html)
+      test: ["CMD", "/usr/local/bin/healthcheck.sh"]
       interval: 30s
       timeout: 10s
-      retries: 5
+      retries: 3
       start_period: 120s
 
   # Queue Worker
@@ -113,6 +122,12 @@ services:
     restart: unless-stopped
     working_dir: /var/www/html
     command: php artisan queue:work redis --verbose --tries=3 --timeout=90 --sleep=3 --max-jobs=1000
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck.sh"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
@@ -124,6 +139,9 @@ services:
       - app-storage:/var/www/html/storage
     environment:
       - CONTAINER_ROLE=queue
+      # Seluruh aplikasi konsisten WIB (database, log, scheduler, tampilan)
+      - TZ=Asia/Jakarta
+      - APP_TIMEZONE=Asia/Jakarta
       - APP_NAME=${APP_NAME:-Laravel}
       - APP_ENV=${APP_ENV:-production}
       - APP_KEY=${APP_KEY}
@@ -138,6 +156,7 @@ services:
       - REDIS_PORT=6379
       - QUEUE_CONNECTION=redis
       - CACHE_DRIVER=redis
+      - CACHE_STORE=redis
     networks:
       - app-network
 
@@ -147,7 +166,16 @@ services:
     # Remove container_name to use default (project_scheduler_1)
     restart: unless-stopped
     working_dir: /var/www/html
-    command: sh -c "while true; do php artisan schedule:run --verbose --no-interaction && sleep 60; done"
+    # schedule:work berjalan tepat di awal setiap menit. Loop lama "schedule:run && sleep 60"
+    # bergeser ~0,5 detik/menit sehingga sesekali melompati satu menit (bel terlewat),
+    # dan jika schedule:run gagal, sleep dilewati -> loop tanpa jeda (CPU 100%).
+    command: php artisan schedule:work --no-interaction
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck.sh"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
     depends_on:
       postgres:
         condition: service_healthy
@@ -159,6 +187,9 @@ services:
       - app-storage:/var/www/html/storage
     environment:
       - CONTAINER_ROLE=scheduler
+      # Seluruh aplikasi konsisten WIB (database, log, scheduler, tampilan)
+      - TZ=Asia/Jakarta
+      - APP_TIMEZONE=Asia/Jakarta
       - APP_NAME=${APP_NAME:-Laravel}
       - APP_ENV=${APP_ENV:-production}
       - APP_KEY=${APP_KEY}
@@ -172,6 +203,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - CACHE_DRIVER=redis
+      - CACHE_STORE=redis
     networks:
       - app-network
 

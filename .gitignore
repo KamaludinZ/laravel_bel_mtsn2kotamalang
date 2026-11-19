@@ -22,3 +22,6 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Heartbeat scheduler (runtime, untuk healthcheck)
+/storage/framework/scheduler-heartbeat

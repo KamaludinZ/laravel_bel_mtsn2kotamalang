@@ -18,11 +18,8 @@ Route::get('/ping', function() {
 // Public Routes
 Route::get('/', [PublicController::class, 'index'])->name('public.index');
 Route::post('/activate-bell-type', [PublicController::class, 'activateBellType'])->name('public.activate-bell-type');
-Route::get('/api/today-schedule', [PublicController::class, 'getTodaySchedule'])->name('api.today-schedule');
-Route::get('/api/current-time', [PublicController::class, 'getCurrentTime'])->name('api.current-time');
-
-// API untuk queue hardware trigger (dipanggil dari JavaScript)
-Route::post('/api/queue-hardware-trigger', [PublicController::class, 'queueHardwareTrigger'])->name('api.queue-hardware-trigger');
+// Endpoint polling halaman bel (/api/today-schedule, /api/current-time,
+// /api/queue-hardware-trigger) ada di routes/api.php: stateless, tanpa sesi.
 
 Route::get('/dashboard', [DashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
 
@@ -37,8 +34,8 @@ Route::get('/test-dashboard', function() {
     ]);
 })->middleware(['auth']);
 
-// Debug route - test database and models
-Route::get('/debug', function() {
+// Debug route - test database and models (hanya admin; jangan bocorkan info server ke publik)
+Route::middleware('auth')->get('/debug', function() {
     try {
         $data = [
             'status' => 'OK',

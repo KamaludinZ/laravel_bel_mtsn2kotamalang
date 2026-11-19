@@ -428,8 +428,8 @@
                     // Fetch schedule every 5 minutes
                     this.scheduleRefreshInterval = setInterval(() => this.fetchSchedule(), 300000);
 
-                    // Sync server time every 30 seconds
-                    this.serverSyncInterval = setInterval(() => this.syncServerTime(), 30000);
+                    // Sync server time every 60 seconds (jam perangkat cukup stabil; hemat request)
+                    this.serverSyncInterval = setInterval(() => this.syncServerTime(), 60000);
 
                     // Re-check quickly when tab/app comes back to foreground
                     const resync = async () => {
@@ -586,9 +586,10 @@
                     try { window.localStorage.setItem(BELL_PLAYED_STORAGE_KEY, JSON.stringify(kept)); } catch (e) {}
                 },
 
-                hasPlayed(key) {
+                hasPlayed(key, stored) {
                     if (this.playedScheduleKeys.has(key)) return true;
-                    return Object.prototype.hasOwnProperty.call(this.readStoredPlayedKeys(), key);
+                    const map = stored || this.readStoredPlayedKeys();
+                    return Object.prototype.hasOwnProperty.call(map, key);
                 },
 
                 markPlayed(key, dateStr) {
@@ -613,11 +614,17 @@
                     }
 
                     const nowSeconds = this.schoolSecondsOfDay(now);
-                    const dueSchedules = this.schedules.filter(schedule => {
+                    // Saring berdasarkan waktu dulu (murah); localStorage hanya dibaca
+                    // jika memang ada jadwal di jendela pemicu.
+                    const inWindow = this.schedules.filter(schedule => {
                         const diff = nowSeconds - this.scheduleSecondsOfDay(schedule);
-                        const key = `${currentDateStr}-${schedule.id}-${schedule.time}`;
-                        return diff >= 0 && diff <= this.triggerWindowSeconds && !this.hasPlayed(key);
+                        return diff >= 0 && diff <= this.triggerWindowSeconds;
                     });
+                    if (inWindow.length === 0) return;
+
+                    const stored = this.readStoredPlayedKeys();
+                    const dueSchedules = inWindow.filter(schedule =>
+                        !this.hasPlayed(`${currentDateStr}-${schedule.id}-${schedule.time}`, stored));
 
                     if (dueSchedules.length === 0) return;
 

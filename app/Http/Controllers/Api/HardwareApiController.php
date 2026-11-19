@@ -45,8 +45,10 @@ class HardwareApiController extends Controller
                     ];
                 });
 
-            // Mark expired commands
-            $this->markExpiredCommands();
+            // Mark expired commands (cukup tiap 30 detik, bukan tiap polling)
+            if (\Illuminate\Support\Facades\Cache::add('hardware:mark-expired-lock', true, 30)) {
+                $this->markExpiredCommands();
+            }
 
             return response()->json([
                 'success' => true,
